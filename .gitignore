@@ -1,3 +1,8 @@
+pip-selfcheck*
+gamera-3.4.3*
+CF-*
+testimg.png
+testplot.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -16,6 +21,11 @@ downloads/
 eggs/
 .eggs/
 lib/
+Lib/
+Include/
+Scripts/
+share/
+tcl/
 lib64/
 parts/
 sdist/
