@@ -1,16 +1,18 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
+from gamera.plugins.image_utilities import union_images
+
 import numpy as np
 gc.init_gamera()
 
 #cut_tolerance_x should be large enough to totally discourage vertical slices
 #cut_tolerance_y should be smaller than the vertical space between lines of text
 #cut_tolerance_noise allows some amount of noise to be seen as a `gap` for cutting thru
-input_image = gc.load_image('./CF-012_3.png')
+input_image = gc.load_image('./CF-011_3.png')
 cut_tolerance_x = 1000
 cut_tolerance_y = 10
 cut_tolerance_noise = 300
-noise_area_thresh = 300         #ignore connected components with area smaller than this
+noise_area_thresh = 200         #ignore connected components with area smaller than this
 prune_small_cuts_tolerance = 2
 below_cuts_tolerance = 0.5
 
@@ -29,68 +31,84 @@ mad_height = np.median([abs(x.nrows - med_height) for x in cuts])
 
 cuts[:] = [x for x in cuts if x.nrows > med_height - (mad_height * prune_small_cuts_tolerance)]
 
-#cuts contains very strict bounding boxes for each line of text that cut off
-#the top and bottom of each character; want to expand these boxes just enough
-#to totally contain each line of text, but no more.
-rectangles = []
-for n in range(0,len(cuts)):
-
-    add_to_bottom = int(cuts[n].nrows * below_cuts_tolerance)
-
-    if n == 0:
-        new_y_offset = 0
-    else:
-        new_y_offset = cuts[n-1].offset_y + cuts[n-1].nrows + add_to_bottom
-
-    point_ul = gc.Point(
-        cuts[n].offset_x,
-        new_y_offset - add_to_bottom
-        )
-    point_lr = gc.Point(
-        cuts[n].offset_x + cuts[n].ncols,
-        cuts[n].offset_y + cuts[n].nrows + add_to_bottom
-        )
-
-    rectangles.append( gc.SubImage(onebit,point_ul,point_lr))
+# #cuts contains very strict bounding boxes for each line of text that cut off
+# #the top and bottom of each character; want to expand these boxes just enough
+# #to totally contain each line of text, but no more.
+# rectangles = []
+# for n in range(0,len(cuts)):
+#
+#     add_to_bottom = int(cuts[n].nrows * below_cuts_tolerance)
+#
+#     if n == 0:
+#         new_y_offset = 0
+#     else:
+#         new_y_offset = cuts[n-1].offset_y + cuts[n-1].nrows + add_to_bottom
+#
+#     point_ul = gc.Point(
+#         cuts[n].offset_x,
+#         new_y_offset - add_to_bottom
+#         )
+#     point_lr = gc.Point(
+#         cuts[n].offset_x + cuts[n].ncols,
+#         cuts[n].offset_y + cuts[n].nrows + add_to_bottom
+#         )
+#
+#     rectangles.append( gc.SubImage(onebit,point_ul,point_lr))
 
 #remove any connected components that do not extend into the cut portion
 
 components = one_bit.cc_analysis()
+components[:] = [c for c in components if c.nrows * c.ncols > noise_area_thresh]
 
 cc_lines = []
 
+def _are_overlapping(offset1,nrows1,offset2,nrows2):
+    """
+    A helper function that returns true if the two intervals specified in the
+    arguments overlap
+    """
+
+    range1 = range(offset1,offset1+nrows1)
+    range2 = range(offset2,offset2+nrows2)
+    check = set(range1).intersection(range2)
+
+    return bool(check)
 
 for cut in cuts:
-    res = []
 
     cut_top = cut.offset_y
     cut_bottom = cut.offset_y + cut.nrows
+    cut_mid = int(cut.offset_y + (cut.nrows * 0.5))
 
-    for comp in components:
+    # for n in range(len(components)):
+    #
+    #     comp_top = components[n].offset_y
+    #     comp_bottom = components[n].offset_y + components[n].nrows
+    #
+    #     is_comp_top_inside = (comp_top > cut_top) and (comp_top < cut_bottom)
+    #     is_comp_bottom_inside = (comp_bottom > cut_top) and (comp_bottom < cut_bottom)
+    #     is_in_this_line = is_comp_top_inside or is_comp_bottom_inside
+    #
+    #     # is_in_this_line = comp_top < cut_mid and comp_bottom > cut_mid
+    #
+    #     #print("top: {} bottom: {} mid: {} isin: {}".format(
+    #     #    comp_top,comp_bottom,cut_mid,is_in_this_line))
+    #
+    #     if is_in_this_line:s
+    #         res.append(components[n])
 
-        if (comp.nrows * comp.ncols) < noise_area_thresh:
-            continue
 
-        comp_top = comp.offset_y
-        comp_bottom = comp.offset_y + comp.nrows
 
-        is_comp_top_inside = (comp_top > cut_top) and (comp_top < cut_bottom)
-        is_comp_bottom_inside = (comp_bottom > cut_top) and (comp_bottom < cut_bottom)
+    res = [x for x in components if cut_mid in range(x.offset_y - x.nrows, x.offset_y + x.nrows*2)]
 
-        is_in_this_line = is_comp_top_inside or is_comp_bottom_inside
-
-        if is_in_this_line:
-            res.append(comp)
-
+    res = sorted(res,key=lambda x: x.offset_x)
     cc_lines.append(res)
 
-
-
-#now, split rectangles into "words;" at least, spaces large enough to
-#definitely be words
-
 def imsv(img):
-    img.save_image("testimg.png")
+    if type(img) == list:
+        union_images(img).save_image("testimg.png")
+    else:
+        img.save_image("testimg.png")
 
 
 def plot(inp):
