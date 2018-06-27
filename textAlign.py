@@ -3,40 +3,48 @@ import matplotlib.pyplot as plt
 import numpy as np
 gc.init_gamera()
 
-#cut_tolerance_x should be larger than the maximum space between words on the
-#same line
+#cut_tolerance_x should be large enough to totally discourage vertical slices
 #cut_tolerance_y should be smaller than the vertical space between lines of text
-input_image = gc.load_image('./CF-010_3.png')
-cut_tolerance_x = 100
-cut_tolerance_y = 100
+#cut_tolerance_noise allows some amount of noise to be seen as a `gap` for cutting thru
+input_image = gc.load_image('./CF-012_3.png')
+cut_tolerance_x = 1000
+cut_tolerance_y = 10
 cut_tolerance_noise = 300
-prune_small_cuts_tolerance = 5
+noise_area_thresh = 300         #ignore connected components with area smaller than this
+prune_small_cuts_tolerance = 2
 below_cuts_tolerance = 0.5
 
-onebit = input_image.to_onebit()
-angle,tmp = onebit.rotation_angle_projections()
-onebit = onebit.rotate(angle = angle, order = 3)
+one_bit = input_image.to_onebit()
+angle,tmp = one_bit.rotation_angle_projections()
+onebit = one_bit.rotate(angle = angle, order = 3)
 
 cuts = onebit.projection_cutting(cut_tolerance_x,cut_tolerance_y,cut_tolerance_noise,1)
 
 #reject sufficiently small cuts likely to have captured noise;
 #reject all cuts whose vertical height is sufficiently small.
-#size threshold: median of all absolute distances from median.
+#size threshold: Median Absolute Deviation (mad_height) * pruning tolerance.
 
 med_height = np.median([x.nrows for x in cuts])
-std_height = np.median([abs(x.nrows - med_height) for x in cuts])
+mad_height = np.median([abs(x.nrows - med_height) for x in cuts])
 
-cuts[:] = [x for x in cuts if x.nrows > med_height - (std_height * prune_small_cuts_tolerance)]
+cuts[:] = [x for x in cuts if x.nrows > med_height - (mad_height * prune_small_cuts_tolerance)]
 
-#the cuts are rather harsh
+#cuts contains very strict bounding boxes for each line of text that cut off
+#the top and bottom of each character; want to expand these boxes just enough
+#to totally contain each line of text, but no more.
 rectangles = []
-for n in range(1,len(cuts)):
+for n in range(0,len(cuts)):
 
     add_to_bottom = int(cuts[n].nrows * below_cuts_tolerance)
 
+    if n == 0:
+        new_y_offset = 0
+    else:
+        new_y_offset = cuts[n-1].offset_y + cuts[n-1].nrows + add_to_bottom
+
     point_ul = gc.Point(
         cuts[n].offset_x,
-        cuts[n-1].offset_y + cuts[n-1].nrows
+        new_y_offset - add_to_bottom
         )
     point_lr = gc.Point(
         cuts[n].offset_x + cuts[n].ncols,
@@ -45,22 +53,45 @@ for n in range(1,len(cuts)):
 
     rectangles.append( gc.SubImage(onebit,point_ul,point_lr))
 
-#go back and insert first row
-add_to_bottom = int(cuts[0].nrows * below_cuts_tolerance)
+#remove any connected components that do not extend into the cut portion
 
-point_ul = gc.Point(
-    cuts[0].offset_x,
-    cuts[0].offset_y - rectangles[0].nrows
-    )
-point_lr = gc.Point(
-    cuts[0].offset_x + cuts[0].ncols,
-    cuts[0].offset_y + cuts[0].nrows + add_to_bottom
-    )
+components = one_bit.cc_analysis()
 
-rectangles.insert(0,gc.SubImage(onebit,point_ul,point_lr))
+cc_lines = []
+
+
+for cut in cuts:
+    res = []
+
+    cut_top = cut.offset_y
+    cut_bottom = cut.offset_y + cut.nrows
+
+    for comp in components:
+
+        if (comp.nrows * comp.ncols) < noise_area_thresh:
+            continue
+
+        comp_top = comp.offset_y
+        comp_bottom = comp.offset_y + comp.nrows
+
+        is_comp_top_inside = (comp_top > cut_top) and (comp_top < cut_bottom)
+        is_comp_bottom_inside = (comp_bottom > cut_top) and (comp_bottom < cut_bottom)
+
+        is_in_this_line = is_comp_top_inside or is_comp_bottom_inside
+
+        if is_in_this_line:
+            res.append(comp)
+
+    cc_lines.append(res)
+
+
+
+#now, split rectangles into "words;" at least, spaces large enough to
+#definitely be words
 
 def imsv(img):
     img.save_image("testimg.png")
+
 
 def plot(inp):
     plt.clf()
