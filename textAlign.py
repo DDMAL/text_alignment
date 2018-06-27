@@ -62,14 +62,17 @@ components[:] = [c for c in components if c.nrows * c.ncols > noise_area_thresh]
 
 cc_lines = []
 
-def _are_overlapping(offset1,nrows1,offset2,nrows2):
+def bases_coincide(slice_offset,slice_nrows,comp_offset,comp_nrows):
     """
     A helper function that returns true if the two intervals specified in the
     arguments overlap
     """
 
-    range1 = range(offset1,offset1+nrows1)
-    range2 = range(offset2,offset2+nrows2)
+    component_base = comp_offset + comp_nrows
+    component_height = min(slice_nrows,comp_nrows)
+
+    range1 = range(slice_offset, slice_offset + slice_nrows)
+    range2 = range(component_base - component_height, component_base)
     check = set(range1).intersection(range2)
 
     return bool(check)
@@ -97,9 +100,8 @@ for cut in cuts:
     #     if is_in_this_line:s
     #         res.append(components[n])
 
-
-
-    res = [x for x in components if cut_mid in range(x.offset_y - x.nrows, x.offset_y + x.nrows*2)]
+    res = [x for x in components if
+        bases_coincide(cut.offset_y,cut.nrows,x.offset_y,x.nrows)]
 
     res = sorted(res,key=lambda x: x.offset_x)
     cc_lines.append(res)
