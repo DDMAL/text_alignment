@@ -6,7 +6,7 @@ import numpy as np
 gc.init_gamera()
 
 
-input_image = gc.load_image('./CF-011_3.png')
+input_image = gc.load_image('./CF-014_3.png')
 
 #parameters to use for inital projection cut, using gamera's built-in projection cutting method
 #cut_tolerance_x should be large enough to totally discourage vertical slices
@@ -16,10 +16,10 @@ cut_tolerance_x = 1000
 cut_tolerance_y = 10
 cut_tolerance_noise = 300
 
-noise_area_thresh = 500         #an int > 0: ignore ccs with area smaller than this
+noise_area_thresh = 1500         #an int > 0: ignore ccs with area smaller than this
 prune_small_cuts_tolerance = 2  #in [1, inf]: get rid of cuts with size this many stdvs below mean
-base_collision_size = 0.25      #in [0,1]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 10   #value in pixels
+base_collision_size = 0.5      #in [0,1]; amt of each cc to consider when clipping
+horizontal_gap_tolerance = 25   #value in pixels
 
 def _bases_coincide(slice_offset, slice_nrows, comp_offset, comp_nrows, base_collision = base_collision_size):
     """
@@ -63,10 +63,7 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
         if not overlaps:
             result.append([cc_copy.pop(0)])
-            print('skipping to new list')
             continue
-
-        print('adding {}'.format(len(overlaps)))
 
         for x in overlaps:
             result[-1].append(x)
@@ -74,11 +71,27 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     gap_sizes = []
     for n in range(len(result)-1):
-        left = result[n][0].offset_x
-        right = result[n][-1].offset_x + result[n][-1].ncols
+        left = result[n][-1].offset_x + result[n][-1].ncols
+        right = result[n+1][0].offset_x
         gap_sizes.append(right - left)
 
     return result, gap_sizes
+
+def _bounding_box(cc_list):
+    '''
+    given a list of connected components, finds the smallest
+    bounding box that encloses all of them.
+    '''
+
+    upper = [x.offset_y for x in cc_list]
+    lower = [x.offset_y + x.nrows for x in cc_list]
+    left = [x.offset_x for x in cc_list]
+    right = [x.offset_x  + x.ncols for x in cc_list]
+
+    ul = gc.Point(min(left),min(upper))
+    lr = gc.Point(max(right),max(lower))
+
+    return ul, lr
 
 
 #find likely rotation angle and correct
@@ -110,6 +123,16 @@ for cut in cuts:
     res = sorted(res,key=lambda x: x.offset_x)
     cc_lines.append(res)
 
+cc_groups = [None] * len(cc_lines)
+gap_sizes = [None] * len(cc_lines)
+
+for n in range(len(cc_lines)):
+    cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
+
+# for group_list in cc_groups:
+#     for group in group_list:
+#         ul, lr = _bounding_box(group)
+#         one_bit.draw_hollow_rect(ul,lr,1,5)
 
 
 
@@ -121,8 +144,9 @@ def imsv(img):
     else:
         img.save_image("testimg.png")
 
-
 def plot(inp):
     plt.clf()
     asdf = plt.plot(inp,c='black',linewidth=1.0)
     plt.savefig("testplot.png",dpi=800)
+
+imsv(one_bit)
