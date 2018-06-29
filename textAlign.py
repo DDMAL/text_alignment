@@ -5,15 +5,12 @@ from gamera.plugins.image_utilities import union_images
 import numpy as np
 gc.init_gamera()
 
-
-input_image = gc.load_image('./CF-014_3.png')
-
+input_image = gc.load_image('./CF-011_3.png')
+filter_size = 20                #to either side
 despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 200
-collision_strip_size = 50         #in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 25   #value in pixels
-
-filter_size = 20 #to either side
+noise_area_thresh = 500
+collision_strip_size = 50       #in [0,inf]; amt of each cc to consider when clipping
+horizontal_gap_tolerance = 20   #value in pixels
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision = collision_strip_size):
     """
@@ -134,43 +131,40 @@ def _calculate_peak_prominence(data,index):
     return prominence
 
 #find likely rotation angle and correct
-image_bin = input_image.to_onebit()
+image_grey = input_image.to_greyscale()
+image_bin = image_grey.to_onebit()
 angle,tmp = image_bin.rotation_angle_projections()
-onebit = image_bin.rotate(angle = angle)
+image_bin = image_bin.rotate(angle = angle)
 image_bin.despeckle(despeckle_amt)
+#image_bin = image_bin.erode_dilate(2,1,1)
 
+#compute y-axis projection of input image and filter with sliding window average
 project = image_bin.projection_rows()
 smoothed_projection = [0] * len(project)
 
 for n in range(filter_size, len(project) - filter_size):
-
     vals = project[n - filter_size : n + filter_size + 1]
     smoothed_projection[n] = np.mean(vals)
 
-#one-dimensional topographic prominence
-#lowest point between highest point and next-highest point
-
+#calculate prominence of all peaks in projection
 prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in range(len(smoothed_projection))]
 prom_max = max([x[1] for x in prominences])
 peak_locations = [x[0] for x in prominences if x[1] > prom_max - 2]
 
+#perform connected component analysis and remove sufficienty small ccs
 components = image_bin.cc_analysis()
 components[:] = [c for c in components if c.black_area > noise_area_thresh]
 
+#using the peak locations found earlier, find all connected components that are intersected by a
+#horizontal strip at either edge of each line. these are the lines of text in the manuscript
 cc_lines = []
-
 for line_loc in peak_locations:
-
     res = [x for x in components if _bases_coincide(line_loc,x.offset_y,x.nrows)]
-
     res = sorted(res,key=lambda x: x.offset_x)
     cc_lines.append(res)
 
-cc_lines[:] = [x for x in cc_lines if bool(x)]
-
 #if a single connected component appears in more than one cc_line, give priority to the line
-#that is closer to the component's center of mass
-
+#that is closer to the cemter of the component's bounding box
 for n in range(len(cc_lines)-1):
     intersect = set(cc_lines[n]) & set(cc_lines[n+1])
 
@@ -184,17 +178,16 @@ for n in range(len(cc_lines)-1):
         else:
             cc_lines[n+1].remove(i)
 
+#remove all empty lines from cc_lines in case they've been created by previous steps
+cc_lines[:] = [x for x in cc_lines if bool(x)]
+
+#group together connected components on the same line into bunches assumed to be composed of whole
+#words or multiple words
 cc_groups = [None] * len(cc_lines)
 gap_sizes = [None] * len(cc_lines)
 
 for n in range(len(cc_lines)):
     cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
-
-for group_list in cc_groups:
-    for group in group_list:
-        ul, lr = _bounding_box(group)
-        image_bin.draw_hollow_rect(ul,lr,1,5)
-
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -216,9 +209,14 @@ def draw_horizontal_lines(image,line_locs):
         end = gc.FloatPoint(image.ncols,l)
         image.draw_line(start, end, 1, 5)
 
+for group_list in cc_groups:
+    for group in group_list:
+        ul, lr = _bounding_box(group)
+        image_bin.draw_hollow_rect(ul,lr,1,5)
 draw_horizontal_lines(image_bin,peak_locations)
 imsv(image_bin)
-
+#
+#
 # plt.clf()
 # plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
 # plt.savefig("testplot.png",dpi=800)
