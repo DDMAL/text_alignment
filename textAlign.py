@@ -6,26 +6,16 @@ import numpy as np
 gc.init_gamera()
 
 
-input_image = gc.load_image('./CF-012_3.png')
-
-#parameters to use for inital projection cut, using gamera's built-in projection cutting method
-#cut_tolerance_x should be large enough to totally discourage vertical slices
-#cut_tolerance_y should be smaller than the vertical space between lines of text
-#cut_tolerance_noise allows some amount of noise to be seen as a `gap` for cutting thru
-cut_tolerance_x = 1000
-cut_tolerance_y = 10
-cut_tolerance_noise = 300
+input_image = gc.load_image('./CF-014_3.png')
 
 despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 200
-
-prune_small_cuts_tolerance = 2  #in [1, inf]: get rid of cuts with size this many stdvs below mean
-base_collision_size = 1     #in [0,1]; amt of each cc to consider when clipping
+collision_strip_size = 50         #in [0,inf]; amt of each cc to consider when clipping
 horizontal_gap_tolerance = 25   #value in pixels
 
 filter_size = 20 #to either side
 
-def _bases_coincide(hline_position, comp_offset, comp_nrows, base_collision = base_collision_size):
+def _bases_coincide(hline_position, comp_offset, comp_nrows, collision = collision_strip_size):
     """
     A helper function that takes in the vertical width of a horizontal strip
     and the vertical measurements of a connected component, and returns a value
@@ -35,13 +25,16 @@ def _bases_coincide(hline_position, comp_offset, comp_nrows, base_collision = ba
     we just check if any part of it lies within the strip at all.
     """
 
-    component_base = comp_offset + comp_nrows
-    #component_height = min(slice_nrows,comp_nrows)
-    component_height = int(np.ceil(comp_nrows * base_collision_size))
+    component_top = comp_offset
+    component_bottom = comp_offset + comp_nrows
 
-    check = component_base - component_height <= hline_position <= component_base
+    strip_top = hline_position - int(collision / 2)
+    strip_bottom = hline_position + int(collision / 2)
 
-    return bool(check)
+    both_above = component_top < strip_top and component_bottom < strip_top
+    both_below = component_top > strip_bottom and component_bottom > strip_bottom
+
+    return (not both_above and not both_below)
 
 def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
     '''
@@ -144,19 +137,6 @@ def _calculate_peak_prominence(data,index):
 image_bin = input_image.to_onebit()
 angle,tmp = image_bin.rotation_angle_projections()
 onebit = image_bin.rotate(angle = angle)
-
-# cuts = onebit.projection_cutting(cut_tolerance_x,cut_tolerance_y,cut_tolerance_noise,1)
-#
-# #reject sufficiently small cuts likely to have captured noise;
-# #reject all cuts whose vertical height is sufficiently small.
-# #size threshold: Median Absolute Deviation (mad_height) * pruning tolerance.
-#
-# med_height = np.median([x.nrows for x in cuts])
-# mad_height = np.median([abs(x.nrows - med_height) for x in cuts])
-#
-# cuts[:] = [x for x in cuts if x.nrows > med_height - (mad_height * prune_small_cuts_tolerance)]
-#
-
 image_bin.despeckle(despeckle_amt)
 
 project = image_bin.projection_rows()
@@ -166,7 +146,6 @@ for n in range(filter_size, len(project) - filter_size):
 
     vals = project[n - filter_size : n + filter_size + 1]
     smoothed_projection[n] = np.mean(vals)
-
 
 #one-dimensional topographic prominence
 #lowest point between highest point and next-highest point
@@ -186,6 +165,24 @@ for line_loc in peak_locations:
 
     res = sorted(res,key=lambda x: x.offset_x)
     cc_lines.append(res)
+
+cc_lines[:] = [x for x in cc_lines if bool(x)]
+
+#if a single connected component appears in more than one cc_line, give priority to the line
+#that is closer to the component's center of mass
+
+for n in range(len(cc_lines)-1):
+    intersect = set(cc_lines[n]) & set(cc_lines[n+1])
+
+    for i in intersect:
+        box_center = i.offset_y + (i.nrows / 2)
+        distance_up = abs(peak_locations[n] - box_center)
+        distance_down = abs(peak_locations[n+1] - box_center)
+
+        if distance_up < distance_down:
+            cc_lines[n].remove(i)
+        else:
+            cc_lines[n+1].remove(i)
 
 cc_groups = [None] * len(cc_lines)
 gap_sizes = [None] * len(cc_lines)
@@ -219,7 +216,7 @@ def draw_horizontal_lines(image,line_locs):
         end = gc.FloatPoint(image.ncols,l)
         image.draw_line(start, end, 1, 5)
 
-# draw_horizontal_lines(image_bin,peak_locations)
+draw_horizontal_lines(image_bin,peak_locations)
 imsv(image_bin)
 
 # plt.clf()
