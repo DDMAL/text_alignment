@@ -17,13 +17,15 @@ cut_tolerance_y = 10
 cut_tolerance_noise = 300
 
 despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
+noise_area_thresh = 200
+
 prune_small_cuts_tolerance = 2  #in [1, inf]: get rid of cuts with size this many stdvs below mean
-base_collision_size = 0.5      #in [0,1]; amt of each cc to consider when clipping
+base_collision_size = 1     #in [0,1]; amt of each cc to consider when clipping
 horizontal_gap_tolerance = 25   #value in pixels
 
 filter_size = 20 #to either side
 
-def _bases_coincide(slice_offset, slice_nrows, comp_offset, comp_nrows, base_collision = base_collision_size):
+def _bases_coincide(hline_position, comp_offset, comp_nrows, base_collision = base_collision_size):
     """
     A helper function that takes in the vertical width of a horizontal strip
     and the vertical measurements of a connected component, and returns a value
@@ -37,9 +39,7 @@ def _bases_coincide(slice_offset, slice_nrows, comp_offset, comp_nrows, base_col
     #component_height = min(slice_nrows,comp_nrows)
     component_height = int(np.ceil(comp_nrows * base_collision_size))
 
-    range1 = range(slice_offset, slice_offset + slice_nrows)
-    range2 = range(component_base - component_height, component_base)
-    check = set(range1).intersection(range2)
+    check = component_base - component_height <= hline_position <= component_base
 
     return bool(check)
 
@@ -175,31 +175,28 @@ prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in ra
 prom_max = max([x[1] for x in prominences])
 peak_locations = [x[0] for x in prominences if x[1] > prom_max - 2]
 
+components = image_bin.cc_analysis()
+components[:] = [c for c in components if c.black_area > noise_area_thresh]
 
+cc_lines = []
 
-#components = image_bin.cc_analysis()
-#components[:] = [c for c in components if c.black_area > noise_area_thresh]
-#
-# cc_lines = []
-#
-# for cut in cuts:
-#
-#     res = [x for x in components if
-#         _bases_coincide(cut.offset_y,cut.nrows,x.offset_y,x.nrows)]
-#
-#     res = sorted(res,key=lambda x: x.offset_x)
-#     cc_lines.append(res)
-#
-# cc_groups = [None] * len(cc_lines)
-# gap_sizes = [None] * len(cc_lines)
-#
-# for n in range(len(cc_lines)):
-#     cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
-#
-# for group_list in cc_groups:
-#     for group in group_list:
-#         ul, lr = _bounding_box(group)
-#         one_bit.draw_hollow_rect(ul,lr,1,5)
+for line_loc in peak_locations:
+
+    res = [x for x in components if _bases_coincide(line_loc,x.offset_y,x.nrows)]
+
+    res = sorted(res,key=lambda x: x.offset_x)
+    cc_lines.append(res)
+
+cc_groups = [None] * len(cc_lines)
+gap_sizes = [None] * len(cc_lines)
+
+for n in range(len(cc_lines)):
+    cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
+
+for group_list in cc_groups:
+    for group in group_list:
+        ul, lr = _bounding_box(group)
+        image_bin.draw_hollow_rect(ul,lr,1,5)
 
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
@@ -222,9 +219,9 @@ def draw_horizontal_lines(image,line_locs):
         end = gc.FloatPoint(image.ncols,l)
         image.draw_line(start, end, 1, 5)
 
-draw_horizontal_lines(image_bin,peak_inds)
+# draw_horizontal_lines(image_bin,peak_locations)
 imsv(image_bin)
 
-plt.clf()
-plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
-plt.savefig("testplot.png",dpi=800)
+# plt.clf()
+# plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
+# plt.savefig("testplot.png",dpi=800)
