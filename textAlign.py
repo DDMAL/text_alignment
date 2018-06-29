@@ -6,7 +6,7 @@ import numpy as np
 gc.init_gamera()
 
 
-input_image = gc.load_image('./CF-014_3.png')
+input_image = gc.load_image('./CF-012_3.png')
 
 #parameters to use for inital projection cut, using gamera's built-in projection cutting method
 #cut_tolerance_x should be large enough to totally discourage vertical slices
@@ -16,7 +16,7 @@ cut_tolerance_x = 1000
 cut_tolerance_y = 10
 cut_tolerance_noise = 300
 
-noise_area_thresh = 1500         #an int > 0: ignore ccs with area smaller than this
+despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
 prune_small_cuts_tolerance = 2  #in [1, inf]: get rid of cuts with size this many stdvs below mean
 base_collision_size = 0.5      #in [0,1]; amt of each cc to consider when clipping
 horizontal_gap_tolerance = 25   #value in pixels
@@ -101,12 +101,12 @@ def _calculate_peak_prominence(data,index):
 
     if (index == 0 or
         index == len(smoothed_projection) - 1 or
-        data[index - 1] > current_peak or 
+        data[index - 1] > current_peak or
         data[index + 1] > current_peak):
         return 0
 
     if current_peak == max(data):
-        return current_peak
+        return np.log(current_peak)
 
     #find index of nearest maxima which is higher than the current peak
     higher_peaks_inds = [i for i, x in enumerate(data) if x > current_peak]
@@ -136,51 +136,30 @@ def _calculate_peak_prominence(data,index):
     between_slice = data[lo:hi]
     key_col = min(between_slice)
 
-    prominence = data[index] - key_col
+    prominence = np.log(data[index] - key_col + 1)
 
     return prominence
 
 #find likely rotation angle and correct
-one_bit = input_image.to_onebit()
-angle,tmp = one_bit.rotation_angle_projections()
-onebit = one_bit.rotate(angle = angle, order = 3)
+image_bin = input_image.to_onebit()
+angle,tmp = image_bin.rotation_angle_projections()
+onebit = image_bin.rotate(angle = angle)
 
-cuts = onebit.projection_cutting(cut_tolerance_x,cut_tolerance_y,cut_tolerance_noise,1)
+# cuts = onebit.projection_cutting(cut_tolerance_x,cut_tolerance_y,cut_tolerance_noise,1)
+#
+# #reject sufficiently small cuts likely to have captured noise;
+# #reject all cuts whose vertical height is sufficiently small.
+# #size threshold: Median Absolute Deviation (mad_height) * pruning tolerance.
+#
+# med_height = np.median([x.nrows for x in cuts])
+# mad_height = np.median([abs(x.nrows - med_height) for x in cuts])
+#
+# cuts[:] = [x for x in cuts if x.nrows > med_height - (mad_height * prune_small_cuts_tolerance)]
+#
 
-#reject sufficiently small cuts likely to have captured noise;
-#reject all cuts whose vertical height is sufficiently small.
-#size threshold: Median Absolute Deviation (mad_height) * pruning tolerance.
+image_bin.despeckle(despeckle_amt)
 
-med_height = np.median([x.nrows for x in cuts])
-mad_height = np.median([abs(x.nrows - med_height) for x in cuts])
-
-cuts[:] = [x for x in cuts if x.nrows > med_height - (mad_height * prune_small_cuts_tolerance)]
-
-components = one_bit.cc_analysis()
-components[:] = [c for c in components if c.nrows * c.ncols > noise_area_thresh]
-
-cc_lines = []
-
-for cut in cuts:
-
-    res = [x for x in components if
-        _bases_coincide(cut.offset_y,cut.nrows,x.offset_y,x.nrows)]
-
-    res = sorted(res,key=lambda x: x.offset_x)
-    cc_lines.append(res)
-
-cc_groups = [None] * len(cc_lines)
-gap_sizes = [None] * len(cc_lines)
-
-for n in range(len(cc_lines)):
-    cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
-
-# for group_list in cc_groups:
-#     for group in group_list:
-#         ul, lr = _bounding_box(group)
-#         one_bit.draw_hollow_rect(ul,lr,1,5)
-
-project = one_bit.projection_rows()
+project = image_bin.projection_rows()
 smoothed_projection = [0] * len(project)
 
 for n in range(filter_size, len(project) - filter_size):
@@ -188,27 +167,40 @@ for n in range(filter_size, len(project) - filter_size):
     vals = project[n - filter_size : n + filter_size + 1]
     smoothed_projection[n] = np.mean(vals)
 
-local_maxima_inds = [i for i,x in enumerate(smoothed_projection) if smoothed_projection[i-1] < x and smoothed_projection[i+1] < x]
-
-local_maxima_inds = sorted(local_maxima_inds,key=lambda x: -1 * smoothed_projection[x])
 
 #one-dimensional topographic prominence
 #lowest point between highest point and next-highest point
 
 prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in range(len(smoothed_projection))]
-#prom_ratio = [(x[0],x[1] / smoothed_projection[x[0]]) for x in prominences]
+prom_max = max([x[1] for x in prominences])
+peak_locations = [x[0] for x in prominences if x[1] > prom_max - 2]
 
-#again, median absolute deviation
+
+
+#components = image_bin.cc_analysis()
+#components[:] = [c for c in components if c.black_area > noise_area_thresh]
 #
-prom_median = np.median([x[1] for x in prominences])
-prom_mad = np.median([abs(x[1] - prom_median) for x in prominences])
-prom_mean = np.mean([x[1] for x in prominences])
-prom_std = np.std([x[1] for x in prominences])
-peak_inds = [x[0] for x in prominences if x[1] > 200]
+# cc_lines = []
+#
+# for cut in cuts:
+#
+#     res = [x for x in components if
+#         _bases_coincide(cut.offset_y,cut.nrows,x.offset_y,x.nrows)]
+#
+#     res = sorted(res,key=lambda x: x.offset_x)
+#     cc_lines.append(res)
+#
+# cc_groups = [None] * len(cc_lines)
+# gap_sizes = [None] * len(cc_lines)
+#
+# for n in range(len(cc_lines)):
+#     cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
+#
+# for group_list in cc_groups:
+#     for group in group_list:
+#         ul, lr = _bounding_box(group)
+#         one_bit.draw_hollow_rect(ul,lr,1,5)
 
-plt.clf()
-plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
-plt.savefig("testplot.png",dpi=800)
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -230,5 +222,9 @@ def draw_horizontal_lines(image,line_locs):
         end = gc.FloatPoint(image.ncols,l)
         image.draw_line(start, end, 1, 5)
 
-draw_horizontal_lines(one_bit,peak_inds)
-imsv(one_bit)
+draw_horizontal_lines(image_bin,peak_inds)
+imsv(image_bin)
+
+plt.clf()
+plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
+plt.savefig("testplot.png",dpi=800)
