@@ -6,7 +6,7 @@ import numpy as np
 gc.init_gamera()
 
 
-input_image = gc.load_image('./CF-014_3.png')
+input_image = gc.load_image('./CF-011_3.png')
 
 #parameters to use for inital projection cut, using gamera's built-in projection cutting method
 #cut_tolerance_x should be large enough to totally discourage vertical slices
@@ -20,6 +20,8 @@ noise_area_thresh = 1500         #an int > 0: ignore ccs with area smaller than 
 prune_small_cuts_tolerance = 2  #in [1, inf]: get rid of cuts with size this many stdvs below mean
 base_collision_size = 0.5      #in [0,1]; amt of each cc to consider when clipping
 horizontal_gap_tolerance = 25   #value in pixels
+
+filter_size = 20 #to either side
 
 def _bases_coincide(slice_offset, slice_nrows, comp_offset, comp_nrows, base_collision = base_collision_size):
     """
@@ -93,7 +95,6 @@ def _bounding_box(cc_list):
 
     return ul, lr
 
-
 #find likely rotation angle and correct
 one_bit = input_image.to_onebit()
 angle,tmp = one_bit.rotation_angle_projections()
@@ -134,7 +135,71 @@ for n in range(len(cc_lines)):
 #         ul, lr = _bounding_box(group)
 #         one_bit.draw_hollow_rect(ul,lr,1,5)
 
+project = one_bit.projection_rows()
+smoothed_projection = [0] * len(project)
 
+for n in range(filter_size, len(project) - filter_size):
+
+    vals = project[n - filter_size : n + filter_size + 1]
+    smoothed_projection[n] = np.mean(vals)
+
+local_maxima_inds = [i for i,x in enumerate(smoothed_projection) if x > 0.5 and
+    smoothed_projection[i-1] < x and smoothed_projection[i+1] < x]
+
+local_maxima_inds = sorted(local_maxima_inds,key=lambda x: -1 * smoothed_projection[x])
+
+#one-dimensional topographic prominence
+#lowest point between highest point and next-highest point
+
+prominences = []
+prominences.append((local_maxima_inds[0], smoothed_projection[local_maxima_inds[0]]))
+
+for n in range(1,len(local_maxima_inds)-1):
+
+    current_peak_ind = local_maxima_inds[n]
+    current_peak = smoothed_projection[current_peak_ind]
+
+    #find index of nearest maxima which is higher than the current peak
+    higher_peaks_inds = [i for i, x in enumerate(smoothed_projection) if x > current_peak]
+
+    right_peaks = [x for x in higher_peaks_inds if x > current_peak_ind]
+    if right_peaks:
+        closest_right_ind = min(right_peaks)
+    else:
+        closest_right_ind = np.inf
+
+    left_peaks = [x for x in higher_peaks_inds if x < current_peak_ind]
+    if left_peaks:
+        closest_left_ind = max(left_peaks)
+    else:
+        closest_left_ind = -np.inf
+
+    right_distance = closest_right_ind - current_peak_ind
+    left_distance =  current_peak_ind - closest_left_ind
+
+    if (right_distance) > (left_distance):
+        closest = closest_left_ind
+    else:
+        closest = closest_right_ind
+
+    lo = min(closest,current_peak_ind)
+    hi = max(closest,current_peak_ind)
+    between_slice = smoothed_projection[lo:hi]
+    key_col = min(between_slice)
+
+    prominences.append((current_peak_ind, smoothed_projection[current_peak_ind] - key_col))
+
+#again, median absolute deviation
+#
+# prom_median = np.median([x[1] for x in prominences])
+# prom_mad = np.median([abs(x[1] - prom_median) for x in prominences])
+prom_mean = np.mean([x[1] for x in prominences])
+prom_std = np.std([x[1] for x in prominences])
+peak_inds = [x[0] for x in prominences if x[1] > prom_mean + 1 * prom_std]
+
+plt.clf()
+plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
+plt.savefig("testplot.png",dpi=800)
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -146,7 +211,15 @@ def imsv(img):
 
 def plot(inp):
     plt.clf()
-    asdf = plt.plot(inp,c='black',linewidth=1.0)
+    asdf = plt.plot(inp,c='black',linewidth=0.5)
     plt.savefig("testplot.png",dpi=800)
 
+def draw_horizontal_lines(image,line_locs):
+
+    for l in line_locs:
+        start = gc.FloatPoint(0,l)
+        end = gc.FloatPoint(image.ncols,l)
+        image.draw_line(start, end, 1, 5)
+
+draw_horizontal_lines(one_bit,peak_inds)
 imsv(one_bit)
