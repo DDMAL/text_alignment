@@ -6,7 +6,7 @@ import numpy as np
 gc.init_gamera()
 
 
-input_image = gc.load_image('./CF-011_3.png')
+input_image = gc.load_image('./CF-014_3.png')
 
 #parameters to use for inital projection cut, using gamera's built-in projection cutting method
 #cut_tolerance_x should be large enough to totally discourage vertical slices
@@ -95,6 +95,51 @@ def _bounding_box(cc_list):
 
     return ul, lr
 
+def _calculate_peak_prominence(data,index):
+
+    current_peak = smoothed_projection[ index ]
+
+    if (index == 0 or
+        index == len(smoothed_projection) - 1 or
+        data[index - 1] > current_peak or 
+        data[index + 1] > current_peak):
+        return 0
+
+    if current_peak == max(data):
+        return current_peak
+
+    #find index of nearest maxima which is higher than the current peak
+    higher_peaks_inds = [i for i, x in enumerate(data) if x > current_peak]
+
+    right_peaks = [x for x in higher_peaks_inds if x > index]
+    if right_peaks:
+        closest_right_ind = min(right_peaks)
+    else:
+        closest_right_ind = np.inf
+
+    left_peaks = [x for x in higher_peaks_inds if x < index]
+    if left_peaks:
+        closest_left_ind = max(left_peaks)
+    else:
+        closest_left_ind = -np.inf
+
+    right_distance = closest_right_ind - index
+    left_distance =  index - closest_left_ind
+
+    if (right_distance) > (left_distance):
+        closest = closest_left_ind
+    else:
+        closest = closest_right_ind
+
+    lo = min(closest,index)
+    hi = max(closest,index)
+    between_slice = data[lo:hi]
+    key_col = min(between_slice)
+
+    prominence = data[index] - key_col
+
+    return prominence
+
 #find likely rotation angle and correct
 one_bit = input_image.to_onebit()
 angle,tmp = one_bit.rotation_angle_projections()
@@ -143,59 +188,23 @@ for n in range(filter_size, len(project) - filter_size):
     vals = project[n - filter_size : n + filter_size + 1]
     smoothed_projection[n] = np.mean(vals)
 
-local_maxima_inds = [i for i,x in enumerate(smoothed_projection) if x > 0.5 and
-    smoothed_projection[i-1] < x and smoothed_projection[i+1] < x]
+local_maxima_inds = [i for i,x in enumerate(smoothed_projection) if smoothed_projection[i-1] < x and smoothed_projection[i+1] < x]
 
 local_maxima_inds = sorted(local_maxima_inds,key=lambda x: -1 * smoothed_projection[x])
 
 #one-dimensional topographic prominence
 #lowest point between highest point and next-highest point
 
-prominences = []
-prominences.append((local_maxima_inds[0], smoothed_projection[local_maxima_inds[0]]))
-
-for n in range(1,len(local_maxima_inds)-1):
-
-    current_peak_ind = local_maxima_inds[n]
-    current_peak = smoothed_projection[current_peak_ind]
-
-    #find index of nearest maxima which is higher than the current peak
-    higher_peaks_inds = [i for i, x in enumerate(smoothed_projection) if x > current_peak]
-
-    right_peaks = [x for x in higher_peaks_inds if x > current_peak_ind]
-    if right_peaks:
-        closest_right_ind = min(right_peaks)
-    else:
-        closest_right_ind = np.inf
-
-    left_peaks = [x for x in higher_peaks_inds if x < current_peak_ind]
-    if left_peaks:
-        closest_left_ind = max(left_peaks)
-    else:
-        closest_left_ind = -np.inf
-
-    right_distance = closest_right_ind - current_peak_ind
-    left_distance =  current_peak_ind - closest_left_ind
-
-    if (right_distance) > (left_distance):
-        closest = closest_left_ind
-    else:
-        closest = closest_right_ind
-
-    lo = min(closest,current_peak_ind)
-    hi = max(closest,current_peak_ind)
-    between_slice = smoothed_projection[lo:hi]
-    key_col = min(between_slice)
-
-    prominences.append((current_peak_ind, smoothed_projection[current_peak_ind] - key_col))
+prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in range(len(smoothed_projection))]
+#prom_ratio = [(x[0],x[1] / smoothed_projection[x[0]]) for x in prominences]
 
 #again, median absolute deviation
 #
-# prom_median = np.median([x[1] for x in prominences])
-# prom_mad = np.median([abs(x[1] - prom_median) for x in prominences])
+prom_median = np.median([x[1] for x in prominences])
+prom_mad = np.median([abs(x[1] - prom_median) for x in prominences])
 prom_mean = np.mean([x[1] for x in prominences])
 prom_std = np.std([x[1] for x in prominences])
-peak_inds = [x[0] for x in prominences if x[1] > prom_mean + 1 * prom_std]
+peak_inds = [x[0] for x in prominences if x[1] > 200]
 
 plt.clf()
 plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
