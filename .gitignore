@@ -3,6 +3,7 @@ gamera-3.4.3*
 CF-*
 testimg.png
 testplot.png
+png/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,16 +1,21 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
+import os
+from os.path import isfile, join
 
 import numpy as np
 gc.init_gamera()
 
-input_image = gc.load_image('./CF-011_3.png')
-filter_size = 20                #to either side
+filename = 'CF-019_3.png'
 despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 500
+noise_area_thresh = 1000        #an int in : ignore ccs with area smaller than this
+
+filter_size = 20                #size of moving-average filter used to smooth projection
+prominence_tolerance = 0.85      #y-axis projection peaks must be at least this prominent
+
 collision_strip_size = 50       #in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 20   #value in pixels
+horizontal_gap_tolerance = 25   #value in pixels
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision = collision_strip_size):
     """
@@ -86,15 +91,21 @@ def _bounding_box(cc_list):
     return ul, lr
 
 def _calculate_peak_prominence(data,index):
+    '''
+    returns the log of the prominence of the peak at a given index in a given dataset. peak
+    prominence gives high values to relatively isolated peaks and low values to peaks that are
+    in the "foothills" of large peaks.
+    '''
+    current_peak = data[index]
 
-    current_peak = smoothed_projection[ index ]
-
+    #ignore values at either end of the dataset or values that are not local maxima
     if (index == 0 or
-        index == len(smoothed_projection) - 1 or
+        index == len(data) - 1 or
         data[index - 1] > current_peak or
         data[index + 1] > current_peak):
         return 0
 
+    #by definition, the prominence of the highest value in a dataset is equal to the value itself
     if current_peak == max(data):
         return np.log(current_peak)
 
@@ -121,6 +132,7 @@ def _calculate_peak_prominence(data,index):
     else:
         closest = closest_right_ind
 
+    #find the value at the lowest point between the nearest higher peak (the key col)
     lo = min(closest,index)
     hi = max(closest,index)
     between_slice = data[lo:hi]
@@ -130,72 +142,86 @@ def _calculate_peak_prominence(data,index):
 
     return prominence
 
-#find likely rotation angle and correct
-image_grey = input_image.to_greyscale()
-image_bin = image_grey.to_onebit()
-angle,tmp = image_bin.rotation_angle_projections()
-image_bin = image_bin.rotate(angle = angle)
-image_bin.despeckle(despeckle_amt)
-#image_bin = image_bin.erode_dilate(2,1,1)
+def _process_image(input_image):
+    #find likely rotation angle and correct
+    print('correcting rotation...')
+    image_grey = input_image.to_greyscale()
+    image_bin = image_grey.to_onebit()
+    angle,tmp = image_bin.rotation_angle_projections()
+    image_bin = image_bin.rotate(angle = angle)
+    image_bin.despeckle(despeckle_amt)
+    #image_bin = image_bin.erode_dilate(2,1,1)
 
-#compute y-axis projection of input image and filter with sliding window average
-project = image_bin.projection_rows()
-smoothed_projection = [0] * len(project)
+    #compute y-axis projection of input image and filter with sliding window average
+    print('smoothing projection...')
+    project = image_bin.projection_rows()
+    smoothed_projection = [0] * len(project)
 
-for n in range(filter_size, len(project) - filter_size):
-    vals = project[n - filter_size : n + filter_size + 1]
-    smoothed_projection[n] = np.mean(vals)
+    for n in range(filter_size, len(project) - filter_size):
+        vals = project[n - filter_size : n + filter_size + 1]
+        smoothed_projection[n] = np.mean(vals)
 
-#calculate prominence of all peaks in projection
-prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in range(len(smoothed_projection))]
-prom_max = max([x[1] for x in prominences])
-peak_locations = [x[0] for x in prominences if x[1] > prom_max - 2]
+    #calculate normalized log prominence of all peaks in projection
+    print('calculating log prominence of peaks...')
+    prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in range(len(smoothed_projection))]
+    prom_max = max([x[1] for x in prominences])
+    prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
+    peak_locations = [x[0] for x in prominences if x[1] > prominence_tolerance]
 
-#perform connected component analysis and remove sufficienty small ccs
-components = image_bin.cc_analysis()
-components[:] = [c for c in components if c.black_area > noise_area_thresh]
+    #perform connected component analysis and remove sufficiently small ccs and ccs that are too
+    #tall; assume these to be ornamental letters
+    print('connected component analysis...')
+    components = image_bin.cc_analysis()
+    med_comp_height = np.median([c.nrows for c in components])
+    components[:] = [c for c in components if c.black_area()[0] > noise_area_thresh and c.nrows < (med_comp_height * 2)]
 
-#using the peak locations found earlier, find all connected components that are intersected by a
-#horizontal strip at either edge of each line. these are the lines of text in the manuscript
-cc_lines = []
-for line_loc in peak_locations:
-    res = [x for x in components if _bases_coincide(line_loc,x.offset_y,x.nrows)]
-    res = sorted(res,key=lambda x: x.offset_x)
-    cc_lines.append(res)
+    #using the peak locations found earlier, find all connected components that are intersected by a
+    #horizontal strip at either edge of each line. these are the lines of text in the manuscript
+    print('intersecting connected components with text lines...')
+    cc_lines = []
+    for line_loc in peak_locations:
+        res = [x for x in components if _bases_coincide(line_loc,x.offset_y,x.nrows)]
+        res = sorted(res,key=lambda x: x.offset_x)
+        cc_lines.append(res)
 
-#if a single connected component appears in more than one cc_line, give priority to the line
-#that is closer to the cemter of the component's bounding box
-for n in range(len(cc_lines)-1):
-    intersect = set(cc_lines[n]) & set(cc_lines[n+1])
+    #if a single connected component appears in more than one cc_line, give priority to the line
+    #that is closer to the cemter of the component's bounding box
+    for n in range(len(cc_lines)-1):
+        intersect = set(cc_lines[n]) & set(cc_lines[n+1])
 
-    for i in intersect:
-        box_center = i.offset_y + (i.nrows / 2)
-        distance_up = abs(peak_locations[n] - box_center)
-        distance_down = abs(peak_locations[n+1] - box_center)
+        for i in intersect:
+            box_center = i.offset_y + (i.nrows / 2)
+            distance_up = abs(peak_locations[n] - box_center)
+            distance_down = abs(peak_locations[n+1] - box_center)
 
-        if distance_up < distance_down:
-            cc_lines[n].remove(i)
-        else:
-            cc_lines[n+1].remove(i)
+            if distance_up < distance_down:
+                cc_lines[n].remove(i)
+            else:
+                cc_lines[n+1].remove(i)
 
-#remove all empty lines from cc_lines in case they've been created by previous steps
-cc_lines[:] = [x for x in cc_lines if bool(x)]
+    #remove all empty lines from cc_lines in case they've been created by previous steps
+    cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-#group together connected components on the same line into bunches assumed to be composed of whole
-#words or multiple words
-cc_groups = [None] * len(cc_lines)
-gap_sizes = [None] * len(cc_lines)
+    #group together connected components on the same line into bunches assumed to be composed of whole
+    #words or multiple words
+    print('grouping connected components....')
+    cc_groups = [None] * len(cc_lines)
+    gap_sizes = [None] * len(cc_lines)
 
-for n in range(len(cc_lines)):
-    cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
+    for n in range(len(cc_lines)):
+        cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
+
+    return {'image':image_bin,
+            'ccs':cc_groups,
+            'peaks':peak_locations,
+            'projection':smoothed_projection}
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-def imsv(img):
+def imsv(img,fname = ''):
     if type(img) == list:
-        union_images(img).save_image("testimg.png")
+        union_images(img).save_image("testimg " + fname + ".png")
     else:
-        img.save_image("testimg.png")
+        img.save_image("testimg " + fname + ".png")
 
 def plot(inp):
     plt.clf()
@@ -209,14 +235,32 @@ def draw_horizontal_lines(image,line_locs):
         end = gc.FloatPoint(image.ncols,l)
         image.draw_line(start, end, 1, 5)
 
-for group_list in cc_groups:
-    for group in group_list:
-        ul, lr = _bounding_box(group)
-        image_bin.draw_hollow_rect(ul,lr,1,5)
-draw_horizontal_lines(image_bin,peak_locations)
-imsv(image_bin)
-#
+
+if __name__ == "__main__":
+
+    #filenames = os.listdir('./png')
+    filenames = ['CF-036_3.png']
+
+    for fn in filenames:
+
+        print('processing ' + fn + '...')
+
+        image = gc.load_image('./png/' + fn)
+        res = _process_image(image)
+        image = res['image']
+        cc_groups = res['ccs']
+        peak_locs = res['peaks']
+
+        for group_list in cc_groups:
+            for group in group_list:
+                ul, lr = _bounding_box(group)
+                image.draw_hollow_rect(ul,lr,1,5)
+        draw_horizontal_lines(image,peak_locs)
+
+        imsv(image,fn)
+
 #
 # plt.clf()
-# plt.scatter([x[0] for x in prominences],[x[1] for x in prominences])
-# plt.savefig("testplot.png",dpi=800)
+# plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
+# plt.plot([x / max(smoothed_projection) for x in smoothed_projection],linewidth=1,color='k')
+# plt.savefig("testplot " + filename + ".png",dpi=800)
