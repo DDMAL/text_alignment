@@ -9,13 +9,13 @@ gc.init_gamera()
 
 filename = 'CF-019_3.png'
 despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 1000        #an int in : ignore ccs with area smaller than this
+noise_area_thresh = 500        #an int in : ignore ccs with area smaller than this
 
 filter_size = 20                #size of moving-average filter used to smooth projection
 prominence_tolerance = 0.85      #y-axis projection peaks must be at least this prominent
 
 collision_strip_size = 50       #in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 25   #value in pixels
+horizontal_gap_tolerance = 15   #value in pixels
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision = collision_strip_size):
     """
@@ -149,8 +149,9 @@ def _process_image(input_image):
     image_bin = image_grey.to_onebit()
     angle,tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle = angle)
-    image_bin.despeckle(despeckle_amt)
     #image_bin = image_bin.erode_dilate(2,1,1)
+    image_bin.despeckle(despeckle_amt)
+
 
     #compute y-axis projection of input image and filter with sliding window average
     print('smoothing projection...')
@@ -238,8 +239,8 @@ def draw_horizontal_lines(image,line_locs):
 
 if __name__ == "__main__":
 
-    #filenames = os.listdir('./png')
-    filenames = ['CF-036_3.png']
+    filenames = os.listdir('./png')
+    #filenames = ['CF-036_3.png']
 
     for fn in filenames:
 
@@ -254,8 +255,8 @@ if __name__ == "__main__":
         for group_list in cc_groups:
             for group in group_list:
                 ul, lr = _bounding_box(group)
-                image.draw_hollow_rect(ul,lr,1,5)
-        draw_horizontal_lines(image,peak_locs)
+                #image.draw_hollow_rect(ul,lr,1,5)
+        #draw_horizontal_lines(image,peak_locs)
 
         imsv(image,fn)
 

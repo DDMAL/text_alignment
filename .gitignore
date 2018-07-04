@@ -1,9 +1,10 @@
 pip-selfcheck*
 gamera-3.4.3*
 CF-*
-testimg.png
-testplot.png
+testimg*
+testplot*
 png/
+letters/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
