@@ -236,11 +236,10 @@ def draw_horizontal_lines(image,line_locs):
         end = gc.FloatPoint(image.ncols,l)
         image.draw_line(start, end, 1, 5)
 
-
 if __name__ == "__main__":
 
-    filenames = os.listdir('./png')
-    #filenames = ['CF-036_3.png']
+    #filenames = os.listdir('./png')
+    filenames = ['CF-036_3.png']
 
     for fn in filenames:
 
