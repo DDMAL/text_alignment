@@ -272,7 +272,7 @@ def _parse_transcript_syllables(filename):
 def imsv(img,fname = ''):
     if type(img) == list:
         union_images(img).save_image("testimg =" + fname + ".png")
-    if type(img) == syllable.Syllable:
+    elif type(img) == syllable.Syllable:
         img.image.save_image("testimg " + fname + ".png")
     else:
         img.save_image("testimg " + fname + ".png")
@@ -312,10 +312,16 @@ if __name__ == "__main__":
         # imsv(image,fn)
 
         print('performing comparisons...')
-        b = transcript_slbs[0][2]
-        c = [syllable.compare(g,b) for g in manuscript_syllables]
-        mindex, temp = min(enumerate(c), key = lambda p: p[1][0])
-        v = manuscript_syllables[mindex]
+        group = transcript_slbs[0]
+        pairs = []
+        for i in group:
+            c = [syllable.compare(g,i) for g in manuscript_syllables]
+            mindex, temp = min(enumerate(c), key = lambda p: p[1][0])
+            v = manuscript_syllables[mindex]
+            pairs.append((i,v,temp))
+
+        ind = 7
+        imsv([pairs[ind][0].image, pairs[ind][1].image])
 
 # plt.clf()
 # plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
