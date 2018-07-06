@@ -76,7 +76,7 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     return result, gap_sizes
 
-def _exhaustively_bunch_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
+def _exhaustively_bunch_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 4):
     '''
     given a list of connected components on a single line (assumed to be in order from left
     to right), groups them into all possible bunches of up to max_num_ccs consecutive
@@ -234,10 +234,10 @@ def _identify_text_lines_and_group_ccs(input_image):
     #group together connected components on the same line into bunches assumed
     #to be composed of whole words or multiple words
 
-    print('grouping connected components....')
-    cc_groups = []
+    print('bunching connected components....')
+    manuscript_syllables = []
 
-    #cc_groups is a list of lists; each top-level entry corresponds to another line in the
+    #manuscript_syllables is a list of lists; each top-level entry corresponds to another line in the
     #manuscript, and each sublist contains bunches of connected components
     for n in range(len(cc_lines)):
         bunches = _exhaustively_bunch_ccs(cc_lines[n])
@@ -247,10 +247,10 @@ def _identify_text_lines_and_group_ccs(input_image):
             bunch_image = union_images(b)
             syllable_list.append(syllable.Syllable(image = bunch_image))
 
-        cc_groups.append(syllable_list)
+        manuscript_syllables += syllable_list
 
     return {'image':image_bin,
-            'ccs':cc_groups,
+            'ccs':manuscript_syllables,
             'peaks':peak_locations,
             'projection':smoothed_projection}
 
@@ -271,7 +271,9 @@ def _parse_transcript_syllables(filename):
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
 def imsv(img,fname = ''):
     if type(img) == list:
-        union_images(img).save_image("testimg " + fname + ".png")
+        union_images(img).save_image("testimg =" + fname + ".png")
+    if type(img) == syllable.Syllable:
+        img.image.save_image("testimg " + fname + ".png")
     else:
         img.save_image("testimg " + fname + ".png")
 
@@ -299,20 +301,22 @@ if __name__ == "__main__":
         image = gc.load_image('./png/' + fn + '.png')
         res = _identify_text_lines_and_group_ccs(image)
         image = res['image']
-        cc_groups = res['ccs']
+        manuscript_syllables = res['ccs']
         peak_locs = res['peaks']
 
         transcript_slbs = _parse_transcript_syllables('./png/' + fn + '.txt')
 
-        # for group_list in cc_groups:
-        #     for group in group_list:
-        #         ul, lr = _bounding_box(group)
-        #         image.draw_hollow_rect(ul,lr,1,5)
-        #draw_horizontal_lines(image,peak_locs)
-
+        # for syl in manuscript_syllables:
+        #     image.draw_hollow_rect(syl.ul,syl.lr,1,5)
+        # draw_horizontal_lines(image,peak_locs)
         # imsv(image,fn)
 
-#
+        print('performing comparisons...')
+        b = transcript_slbs[0][2]
+        c = [syllable.compare(g,b) for g in manuscript_syllables]
+        mindex, temp = min(enumerate(c), key = lambda p: p[1][0])
+        v = manuscript_syllables[mindex]
+
 # plt.clf()
 # plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
 # plt.plot([x / max(smoothed_projection) for x in smoothed_projection],linewidth=1,color='k')

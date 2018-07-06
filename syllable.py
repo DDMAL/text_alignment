@@ -9,12 +9,12 @@ from gamera.plugins.image_utilities import union_images
 class Syllable(object):
 
     gap_ignore = 10
-    line_step = 2
+    line_step = 4
 
     letters_path = './letters/'
     letter_list = (
         'sa se si sp sr ss sti st su sy ca ci co cre cu'.split() +
-        'ae be ca de do es et fe gr te us vo'.split() +
+        'ae be ca de do es et fe gr te tu us vo'.split() +
         'a b c d e f g h i j l m n o p q r s t u v x y'.split()
         )
 
@@ -41,6 +41,11 @@ class Syllable(object):
             self.image = image
 
         self._extract_features()
+        self.ul = gc.Point(self.image.offset_x,self.image.offset_y)
+        self.lr = gc.Point(
+            self.image.offset_x + self.image.ncols,
+            self.image.offset_y + self.image.nrows
+            )
 
     def _index_in_seq(self, subseq, seq):
         i, n, m = -1, len(seq), len(subseq)
@@ -69,7 +74,8 @@ class Syllable(object):
         self.resolved_text = result
 
     def _make_image(self):
-
+        #given a list of individual chunk images, stitch them together into an image of a syllable.
+        #
         ims = [Syllable.chunk_images[x] for x in self.resolved_text]
 
         padding = 1
@@ -88,7 +94,8 @@ class Syllable(object):
 
             cur_left_bound += padding + img.ncols
 
-        self.image = result
+
+        self.image = result.trim_image()
 
     def _runs_line(self, ind, vertical = False, gap_ignore = gap_ignore, line_step = line_step):
 
@@ -118,8 +125,8 @@ class Syllable(object):
         for i,f in enumerate(skeleton_feats):
             res['skeleton_' + str(i)] = f
 
-        sqs['horizontal_gaps'] = [self._runs_line(x, False) for x in range(0, self.image.nrows, Syllable.line_step)]
-        sqs['vertical_gaps'] = [self._runs_line(x, True) for x in range(0, self.image.ncols, Syllable.line_step)]
+        #sqs['horizontal_gaps'] = [self._runs_line(x, False) for x in range(0, self.image.nrows, Syllable.line_step)]
+        #sqs['vertical_gaps'] = [self._runs_line(x, True) for x in range(0, self.image.ncols, Syllable.line_step)]
         sqs['volume64regions'] = self.image.volume64regions()
 
         self.sequence_features = sqs
