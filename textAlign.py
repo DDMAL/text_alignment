@@ -74,10 +74,11 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     return result, gap_sizes
 
-
 def _group_all_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
     '''
-    a
+    given a list of connected components on a single line (assumed to be in order from left
+    to right), groups them into all possible bunches of up to max_num_ccs consecutive
+    components. bunches with gaps larger than horizontal_gap_tolerance are not added.
     '''
 
     cc_copy = cc_list[:]
@@ -237,6 +238,8 @@ def _process_image(input_image):
     cc_groups = [None] * len(cc_lines)
     gap_sizes = [None] * len(cc_lines)
 
+    #cc_groups is a list of lists of lists; each top-level entry corresponds to another line in the
+    #manuscript, and each sublist contains bunches of connected components
     for n in range(len(cc_lines)):
         cc_groups[n] = _group_all_ccs(cc_lines[n])
 
