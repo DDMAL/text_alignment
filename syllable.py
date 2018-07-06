@@ -1,7 +1,9 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
 import itertools
-import fastdtw
+from fastdtw import fastdtw
+import numpy as np
+
 from gamera.plugins.image_utilities import union_images
 
 class Syllable(object):
@@ -123,7 +125,24 @@ class Syllable(object):
         self.sequence_features = sqs
         self.features = res
 
+
+def compare(A, B):
+    dist = []
+
+    seqs_a = A.sequence_features.values()
+    seqs_b = B.sequence_features.values()
+
+    for n in range(len(seqs_a)):
+        a_pts = [[i,x] for i,x in enumerate(seqs_a[n])]
+        b_pts = [[i,x] for i,x in enumerate(seqs_b[n])]
+        dist.append(fastdtw(a_pts, b_pts)[0])
+
+    return dist
+
 if __name__ == "__main__":
     gc.init_gamera()
     asdf = Syllable('domssvo')
-    print(asdf.resolved_text)
+    hjkl = Syllable('asdssvo')
+
+    result = compare(asdf,hjkl)
+    print(result)
