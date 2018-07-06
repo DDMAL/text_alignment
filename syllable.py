@@ -7,7 +7,7 @@ from gamera.plugins.image_utilities import union_images
 class Syllable(object):
 
     gap_ignore = 10
-    line_step = 4
+    line_step = 2
 
     letters_path = './letters/'
     letter_list = (
@@ -25,7 +25,7 @@ class Syllable(object):
 
     def __init__ (self, text = None, image = None):
 
-        if not (text ^ image):
+        if not (bool(text) ^ bool(image)):
             raise ValueError('Supply an image or text, but not both')
 
         if text:
@@ -109,10 +109,10 @@ class Syllable(object):
     def _extract_features(self):
         res  = {}
         sqs = {}
-        res['volume'] = self.image.volume()
+        res['volume'] = self.image.volume()[0]
         res['black_area'] = self.image.black_area()[0]
 
-        skeleton_feats = self.image.skeleton_features()[0]
+        skeleton_feats = self.image.skeleton_features()
         for i,f in enumerate(skeleton_feats):
             res['skeleton_' + str(i)] = f
 

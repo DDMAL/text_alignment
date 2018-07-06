@@ -1,11 +1,13 @@
 import gamera.core as gc
+gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
 import os
+import re
+import syllable
 from os.path import isfile, join
-
 import numpy as np
-gc.init_gamera()
+reload(syllable)
 
 filename = 'CF-019_3.png'
 despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller than this
@@ -74,7 +76,7 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     return result, gap_sizes
 
-def _group_all_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
+def _exhaustively_bunch_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
     '''
     given a list of connected components on a single line (assumed to be in order from left
     to right), groups them into all possible bunches of up to max_num_ccs consecutive
@@ -94,8 +96,6 @@ def _group_all_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_cc
             cc_end = [x.offset_x + x.ncols for x in g[:-1]]
             cc_begin = [x.offset_x for x in g[1:]]
             gaps = [cc_begin[x] - cc_end[x] for x in range(n-1)]
-
-            print(gaps)
 
             if not any([x >= horizontal_gap_tolerance for x in gaps]):
                 result.append(g)
@@ -171,7 +171,7 @@ def _calculate_peak_prominence(data,index):
 
     return prominence
 
-def _process_image(input_image):
+def _identify_text_lines_and_group_ccs(input_image):
     #find likely rotation angle and correct
     print('correcting rotation...')
     image_grey = input_image.to_greyscale()
@@ -235,18 +235,38 @@ def _process_image(input_image):
     #to be composed of whole words or multiple words
 
     print('grouping connected components....')
-    cc_groups = [None] * len(cc_lines)
-    gap_sizes = [None] * len(cc_lines)
+    cc_groups = []
 
-    #cc_groups is a list of lists of lists; each top-level entry corresponds to another line in the
+    #cc_groups is a list of lists; each top-level entry corresponds to another line in the
     #manuscript, and each sublist contains bunches of connected components
     for n in range(len(cc_lines)):
-        cc_groups[n] = _group_all_ccs(cc_lines[n])
+        bunches = _exhaustively_bunch_ccs(cc_lines[n])
+        syllable_list = []
+
+        for b in bunches:
+            bunch_image = union_images(b)
+            syllable_list.append(syllable.Syllable(image = bunch_image))
+
+        cc_groups.append(syllable_list)
 
     return {'image':image_bin,
             'ccs':cc_groups,
             'peaks':peak_locations,
             'projection':smoothed_projection}
+
+def _parse_transcript_syllables(filename):
+
+    res = []
+
+    file = open(filename,'r')
+    lines = (file.readlines())
+    file.close()
+
+    for l in lines:
+        phrase = re.split('[\s-]', l)
+        res.append([syllable.Syllable(text = x.lower()) for x in phrase if x])
+
+    return res
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
 def imsv(img,fname = ''):
@@ -270,25 +290,27 @@ def draw_horizontal_lines(image,line_locs):
 if __name__ == "__main__":
 
     #filenames = os.listdir('./png')
-    filenames = ['CF-036_3.png']
+    filenames = ['CF-011_3']
 
     for fn in filenames:
 
         print('processing ' + fn + '...')
 
-        image = gc.load_image('./png/' + fn)
-        res = _process_image(image)
+        image = gc.load_image('./png/' + fn + '.png')
+        res = _identify_text_lines_and_group_ccs(image)
         image = res['image']
         cc_groups = res['ccs']
         peak_locs = res['peaks']
 
-        for group_list in cc_groups:
-            for group in group_list:
-                ul, lr = _bounding_box(group)
-                image.draw_hollow_rect(ul,lr,1,5)
+        transcript_slbs = _parse_transcript_syllables('./png/' + fn + '.txt')
+
+        # for group_list in cc_groups:
+        #     for group in group_list:
+        #         ul, lr = _bounding_box(group)
+        #         image.draw_hollow_rect(ul,lr,1,5)
         #draw_horizontal_lines(image,peak_locs)
 
-        imsv(image,fn)
+        # imsv(image,fn)
 
 #
 # plt.clf()
