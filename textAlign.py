@@ -15,7 +15,7 @@ filter_size = 20                #size of moving-average filter used to smooth pr
 prominence_tolerance = 0.85      #y-axis projection peaks must be at least this prominent
 
 collision_strip_size = 50       #in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 15   #value in pixels
+horizontal_gap_tolerance = 50   #value in pixels
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision = collision_strip_size):
     """
@@ -73,6 +73,34 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
         gap_sizes.append(right - left)
 
     return result, gap_sizes
+
+
+def _group_all_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
+    '''
+    a
+    '''
+
+    cc_copy = cc_list[:]
+    result = []
+
+    for n in range(1,max_num_ccs):
+        next_group = [cc_copy[x:x + n] for x in range(len(cc_copy) - n + 1)]
+
+        #for each member of this group, decide if it should be added; make sure the connected
+        #components are separated by less than horizontal_gap_tolerance
+
+        for g in next_group:
+            cc_end = [x.offset_x + x.ncols for x in g[:-1]]
+            cc_begin = [x.offset_x for x in g[1:]]
+            gaps = [cc_begin[x] - cc_end[x] for x in range(n-1)]
+
+            print(gaps)
+
+            if not any([x >= horizontal_gap_tolerance for x in gaps]):
+                result.append(g)
+
+    #result += [[x] for x in cc_copy]
+    return result
 
 def _bounding_box(cc_list):
     '''
@@ -152,7 +180,6 @@ def _process_image(input_image):
     #image_bin = image_bin.erode_dilate(2,1,1)
     image_bin.despeckle(despeckle_amt)
 
-
     #compute y-axis projection of input image and filter with sliding window average
     print('smoothing projection...')
     project = image_bin.projection_rows()
@@ -164,7 +191,7 @@ def _process_image(input_image):
 
     #calculate normalized log prominence of all peaks in projection
     print('calculating log prominence of peaks...')
-    prominences = [(i,_calculate_peak_prominence(smoothed_projection,i)) for i in range(len(smoothed_projection))]
+    prominences = [(i, _calculate_peak_prominence(smoothed_projection, i)) for i in range(len(smoothed_projection))]
     prom_max = max([x[1] for x in prominences])
     prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
     peak_locations = [x[0] for x in prominences if x[1] > prominence_tolerance]
@@ -181,7 +208,7 @@ def _process_image(input_image):
     print('intersecting connected components with text lines...')
     cc_lines = []
     for line_loc in peak_locations:
-        res = [x for x in components if _bases_coincide(line_loc,x.offset_y,x.nrows)]
+        res = [x for x in components if _bases_coincide(line_loc, x.offset_y,x.nrows)]
         res = sorted(res,key=lambda x: x.offset_x)
         cc_lines.append(res)
 
@@ -203,14 +230,15 @@ def _process_image(input_image):
     #remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-    #group together connected components on the same line into bunches assumed to be composed of whole
-    #words or multiple words
+    #group together connected components on the same line into bunches assumed
+    #to be composed of whole words or multiple words
+
     print('grouping connected components....')
     cc_groups = [None] * len(cc_lines)
     gap_sizes = [None] * len(cc_lines)
 
     for n in range(len(cc_lines)):
-        cc_groups[n], gap_sizes[n] = _group_ccs(cc_lines[n])
+        cc_groups[n] = _group_all_ccs(cc_lines[n])
 
     return {'image':image_bin,
             'ccs':cc_groups,
@@ -254,7 +282,7 @@ if __name__ == "__main__":
         for group_list in cc_groups:
             for group in group_list:
                 ul, lr = _bounding_box(group)
-                #image.draw_hollow_rect(ul,lr,1,5)
+                image.draw_hollow_rect(ul,lr,1,5)
         #draw_horizontal_lines(image,peak_locs)
 
         imsv(image,fn)

@@ -1,6 +1,7 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
 import itertools
+import fastdtw
 from gamera.plugins.image_utilities import union_images
 
 class Syllable(object):
@@ -23,12 +24,18 @@ class Syllable(object):
     chunk_images = _dict_helper(letters_path,letter_list)
 
     def __init__ (self, text = None, image = None):
+
+        if not (text ^ image):
+            raise ValueError('Supply an image or text, but not both')
+
         if text:
+            self.is_synthetic = True
             self.text = text
             self._resolve_text()
             self._make_image()
 
         if image:
+            self.is_synthetic = False
             self.image = image
 
         self._extract_features()
@@ -81,7 +88,7 @@ class Syllable(object):
 
         self.image = result
 
-    def _runs_line(self, ind, vertical = False, gap_ignore = gap_ignore):
+    def _runs_line(self, ind, vertical = False, gap_ignore = gap_ignore, line_step = line_step):
 
         if vertical:
             cross_line = [self.image[ind,x] for x in range(self.image.nrows)]
@@ -103,12 +110,20 @@ class Syllable(object):
         res  = {}
         sqs = {}
         res['volume'] = self.image.volume()
+        res['black_area'] = self.image.black_area()[0]
+
+        skeleton_feats = self.image.skeleton_features()[0]
+        for i,f in enumerate(skeleton_feats):
+            res['skeleton_' + str(i)] = f
+
         sqs['horizontal_gaps'] = [self._runs_line(x, False) for x in range(0, self.image.nrows, Syllable.line_step)]
         sqs['vertical_gaps'] = [self._runs_line(x, True) for x in range(0, self.image.ncols, Syllable.line_step)]
+        sqs['volume64regions'] = self.image.volume64regions()
 
         self.sequence_features = sqs
         self.features = res
 
 if __name__ == "__main__":
+    gc.init_gamera()
     asdf = Syllable('domssvo')
     print(asdf.resolved_text)
