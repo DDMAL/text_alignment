@@ -13,8 +13,8 @@ class Syllable(object):
 
     letters_path = './letters/'
     letter_list = (
-        'sa se si sp sr ss sti st su sy ca ci co cre cu'.split() +
-        'ae be ca de do es et fe gr te tu us vo'.split() +
+        'cae cre est rex nus sti tri'.split() +
+        'ae be bo ca ch ci co cu de do ec es et fa fe fi fo gr pe po ra sa se si sp sr ss st su sy ta te ti tu us vo'.split() +
         'a b c d e f g h i j l m n o p q r s t u v x y'.split()
         )
 
@@ -39,8 +39,10 @@ class Syllable(object):
         if image:
             self.is_synthetic = False
             self.image = image
+            self.text = None
 
         self._extract_features()
+
         self.ul = gc.Point(self.image.offset_x,self.image.offset_y)
         self.lr = gc.Point(
             self.image.offset_x + self.image.ncols,
@@ -117,39 +119,77 @@ class Syllable(object):
 
     def _extract_features(self):
         res  = {}
-        sqs = {}
+
         res['volume'] = self.image.volume()[0]
         res['black_area'] = self.image.black_area()[0]
+        res['area'] = self.image.area()[0]
+        res['diagonal_projection'] = self.image.diagonal_projection()[0]
 
         skeleton_feats = self.image.skeleton_features()
         for i,f in enumerate(skeleton_feats):
             res['skeleton_' + str(i)] = f
 
-        #sqs['horizontal_gaps'] = [self._runs_line(x, False) for x in range(0, self.image.nrows, Syllable.line_step)]
-        #sqs['vertical_gaps'] = [self._runs_line(x, True) for x in range(0, self.image.ncols, Syllable.line_step)]
-        sqs['volume64regions'] = self.image.volume64regions()
+        volume_feats = self.image.volume16regions()
+        for i,f in enumerate(volume_feats):
+            res['volume_region_' + str(i)] = f
 
-        self.sequence_features = sqs
+        moments_feats = self.image.moments()
+        for i,f in enumerate(moments_feats):
+            res['moments_' + str(i)] = f
+
         self.features = res
 
+# def compare(A, B):
+#     dist = []
+#
+#     seqs_a = A.sequence_features.values()
+#     seqs_b = B.sequence_features.values()
+#
+#     for n in range(len(seqs_a)):
+#         a_pts = [[i,x] for i,x in enumerate(seqs_a[n])]
+#         b_pts = [[i,x] for i,x in enumerate(seqs_b[n])]
+#         dist.append(fastdtw(a_pts, b_pts)[0])
+#
+#     return dist
 
-def compare(A, B):
-    dist = []
+def knn_search(train_set, test_syl, k = 5):
+    '''
+    given a list of syllables as a train set and a single syllable to search for, returns the
+    nearest syllable to the test syllable in the feature space.
+    '''
 
-    seqs_a = A.sequence_features.values()
-    seqs_b = B.sequence_features.values()
+    feature_keys = train_set[0].features.keys()
+    closest = [(None, np.inf)]
 
-    for n in range(len(seqs_a)):
-        a_pts = [[i,x] for i,x in enumerate(seqs_a[n])]
-        b_pts = [[i,x] for i,x in enumerate(seqs_b[n])]
-        dist.append(fastdtw(a_pts, b_pts)[0])
+    for train_syl in train_set:
+        dist = 0
+        max_val = np.inf
 
-    return dist
+        for fk in feature_keys:
+            df = test_syl.features[fk] - train_syl.features[fk]
+            dist += df * df
+
+            #break out early if possible
+            if dist > max_val:
+                break
+
+        if len(closest) < k:
+            closest.append((train_syl,dist))
+            continue
+
+        if dist > max_val:
+            continue
+
+        #if we didn't break out early, this is a candidate for entry
+        #key with max value
+        max_key = max(closest, key = lambda x: x[1])
+        closest.remove(max_key)
+        closest.append((train_syl,dist))
+        max_val = max(closest, key = lambda x: x[1])[1]
+
+    return closest
 
 if __name__ == "__main__":
     gc.init_gamera()
     asdf = Syllable('domssvo')
     hjkl = Syllable('asdssvo')
-
-    result = compare(asdf,hjkl)
-    print(result)

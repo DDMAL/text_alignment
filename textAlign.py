@@ -131,7 +131,8 @@ def _calculate_peak_prominence(data,index):
     if (index == 0 or
         index == len(data) - 1 or
         data[index - 1] > current_peak or
-        data[index + 1] > current_peak):
+        data[index + 1] > current_peak or
+        (data[index - 1] == current_peak and data[index + 1] == current_peak)):
         return 0
 
     #by definition, the prominence of the highest value in a dataset is equal to the value itself
@@ -171,6 +172,18 @@ def _calculate_peak_prominence(data,index):
 
     return prominence
 
+def _moving_avg_filter(data,filter_size):
+    '''
+    returns a list containing the data in @data filtered through a moving-average filter of size
+    @filter_size to either side; that is, filter_size = 1 gives a size of 3, filter size = 2 gives
+    a size of 5, and so on.
+    '''
+    smoothed_proj = [0] * len(data)
+    for n in range(filter_size, len(proj) - filter_size):
+        vals = proj[n - filter_size : n + filter_size + 1]
+        smoothed_proj[n] = np.mean(vals)
+    return smoothed_proj
+
 def _identify_text_lines_and_group_ccs(input_image):
     #find likely rotation angle and correct
     print('correcting rotation...')
@@ -184,11 +197,7 @@ def _identify_text_lines_and_group_ccs(input_image):
     #compute y-axis projection of input image and filter with sliding window average
     print('smoothing projection...')
     project = image_bin.projection_rows()
-    smoothed_projection = [0] * len(project)
-
-    for n in range(filter_size, len(project) - filter_size):
-        vals = project[n - filter_size : n + filter_size + 1]
-        smoothed_projection[n] = np.mean(vals)
+    smoothed_projection = _moving_avg_filter(project,filter_size)
 
     #calculate normalized log prominence of all peaks in projection
     print('calculating log prominence of peaks...')
@@ -237,8 +246,8 @@ def _identify_text_lines_and_group_ccs(input_image):
     print('bunching connected components....')
     manuscript_syllables = []
 
-    #manuscript_syllables is a list of lists; each top-level entry corresponds to another line in the
-    #manuscript, and each sublist contains bunches of connected components
+    #manuscript_syllables is a list of lists; each top-level entry corresponds to another line in
+    #the manuscript, and each sublist contains bunches of connected components
     for n in range(len(cc_lines)):
         bunches = _exhaustively_bunch_ccs(cc_lines[n])
         syllable_list = []
@@ -252,6 +261,7 @@ def _identify_text_lines_and_group_ccs(input_image):
     return {'image':image_bin,
             'ccs':manuscript_syllables,
             'peaks':peak_locations,
+            'cc_lines':cc_lines,
             'projection':smoothed_projection}
 
 def _parse_transcript_syllables(filename):
@@ -264,18 +274,26 @@ def _parse_transcript_syllables(filename):
 
     for l in lines:
         phrase = re.split('[\s-]', l)
-        res.append([syllable.Syllable(text = x.lower()) for x in phrase if x])
+        res += [syllable.Syllable(text = x.lower()) for x in phrase if x]
 
     return res
 
 #LOCAL HELPER FUNCTIONS - DON'T END UP IN RODAN
 def imsv(img,fname = ''):
     if type(img) == list:
-        union_images(img).save_image("testimg =" + fname + ".png")
+        union_images(img).save_image("testimg " + fname + ".png")
     elif type(img) == syllable.Syllable:
         img.image.save_image("testimg " + fname + ".png")
+        print(img.text)
     else:
         img.save_image("testimg " + fname + ".png")
+
+def draw_syl_boxes_imsv(img,syl):
+    new_img = union_images([img.image_copy(), syl.image])
+    new_img.draw_hollow_rect(syl.ul,syl.lr,1,9)
+    for ps in syl.predicted_syllable:
+        new_img.draw_hollow_rect(ps.ul,ps.lr,1,9)
+    imsv(new_img)
 
 def plot(inp):
     plt.clf()
@@ -301,10 +319,22 @@ if __name__ == "__main__":
         image = gc.load_image('./png/' + fn + '.png')
         res = _identify_text_lines_and_group_ccs(image)
         image = res['image']
-        manuscript_syllables = res['ccs']
+        manuscript_syls = res['ccs']
         peak_locs = res['peaks']
+        cc_lines = res['cc_lines']
 
-        transcript_slbs = _parse_transcript_syllables('./png/' + fn + '.txt')
+        transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
+
+        #normalize extracted features
+        all_syls = manuscript_syls + transcript_syls
+
+        for fk in all_syls[0].features.keys():
+            avg = np.mean([x.features[fk] for x in all_syls])
+            std = np.std([x.features[fk] for x in all_syls])
+            for n in range(len(manuscript_syls)):
+                manuscript_syls[n].features[fk] = (manuscript_syls[n].features[fk] - avg) / std
+            for n in range(len(transcript_syls)):
+                transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
 
         # for syl in manuscript_syllables:
         #     image.draw_hollow_rect(syl.ul,syl.lr,1,5)
@@ -312,18 +342,30 @@ if __name__ == "__main__":
         # imsv(image,fn)
 
         print('performing comparisons...')
-        group = transcript_slbs[0]
-        pairs = []
-        for i in group:
-            c = [syllable.compare(g,i) for g in manuscript_syllables]
-            mindex, temp = min(enumerate(c), key = lambda p: p[1][0])
-            v = manuscript_syllables[mindex]
-            pairs.append((i,v,temp))
+        for ts in transcript_syls:
+            res = syllable.knn_search(manuscript_syls, ts, 5)
+            #found_syl = min(res, key = lambda x: x[1])[0]
+            found_syls = [x[0] for x in res]
+            ts.predicted_syllable = found_syls
 
-        ind = 7
-        imsv([pairs[ind][0].image, pairs[ind][1].image])
+proj = union_images(cc_lines[5]).projection_cols()
+proj = [max(proj) - x for x in proj] #reverse it
+char_filter_size = 5
 
-# plt.clf()
-# plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
-# plt.plot([x / max(smoothed_projection) for x in smoothed_projection],linewidth=1,color='k')
-# plt.savefig("testplot " + filename + ".png",dpi=800)
+smoothed_proj = _moving_avg_filter(proj,char_filter_size)
+for n in range(char_filter_size, len(proj) - char_filter_size):
+    vals = proj[n - char_filter_size : n + char_filter_size + 1]
+    smoothed_proj[n] = np.mean(vals)
+
+prominences = [(i, _calculate_peak_prominence(smoothed_proj, i)) for i in range(len(smoothed_proj))]
+prom_max = max([x[1] for x in prominences])
+prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
+peak_locs = [x[0] for x in prominences if x[1] > prominence_tolerance]
+
+
+
+
+plt.clf()
+plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
+plt.plot([x / max(smoothed_proj) for x in smoothed_proj],linewidth=1,color='k')
+plt.savefig("testplot " + filename + ".png",dpi=800)
