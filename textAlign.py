@@ -148,7 +148,9 @@ def _calculate_peak_prominence(data,index):
     else:
         closest_right_ind = np.inf
 
-    left_peaks = [x for x in higher_peaks_inds if x < index]
+    #this <= ensures that on flat-topped peaks, the rightmost side of the peak will be designated
+    #as the most prominent one
+    left_peaks = [x for x in higher_peaks_inds if x <= index]
     if left_peaks:
         closest_left_ind = max(left_peaks)
     else:
@@ -178,11 +180,11 @@ def _moving_avg_filter(data,filter_size):
     @filter_size to either side; that is, filter_size = 1 gives a size of 3, filter size = 2 gives
     a size of 5, and so on.
     '''
-    smoothed_proj = [0] * len(data)
-    for n in range(filter_size, len(proj) - filter_size):
-        vals = proj[n - filter_size : n + filter_size + 1]
-        smoothed_proj[n] = np.mean(vals)
-    return smoothed_proj
+    smoothed = [0] * len(data)
+    for n in range(filter_size, len(data) - filter_size):
+        vals = data[n - filter_size : n + filter_size + 1]
+        smoothed[n] = np.mean(vals)
+    return smoothed
 
 def _identify_text_lines_and_group_ccs(input_image):
     #find likely rotation angle and correct
@@ -192,6 +194,8 @@ def _identify_text_lines_and_group_ccs(input_image):
     angle,tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle = angle)
     #image_bin = image_bin.erode_dilate(2,1,1)
+    image_bin.filter_short_runs(3,'black')
+    image_bin.filter_narrow_runs(3,'black')
     image_bin.despeckle(despeckle_amt)
 
     #compute y-axis projection of input image and filter with sliding window average
@@ -348,22 +352,25 @@ if __name__ == "__main__":
             found_syls = [x[0] for x in res]
             ts.predicted_syllable = found_syls
 
-proj = union_images(cc_lines[5]).projection_cols()
+ul, lr = _bounding_box(cc_lines[4])
+line_image = image.subimage(ul,lr)
+proj = line_image.projection_cols()
 proj = [max(proj) - x for x in proj] #reverse it
 char_filter_size = 5
-
 smoothed_proj = _moving_avg_filter(proj,char_filter_size)
-for n in range(char_filter_size, len(proj) - char_filter_size):
-    vals = proj[n - char_filter_size : n + char_filter_size + 1]
-    smoothed_proj[n] = np.mean(vals)
 
 prominences = [(i, _calculate_peak_prominence(smoothed_proj, i)) for i in range(len(smoothed_proj))]
 prom_max = max([x[1] for x in prominences])
 prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
 peak_locs = [x[0] for x in prominences if x[1] > prominence_tolerance]
 
+boxes = []
+for n in range(len(peak_locs) - 1):
 
+    ul = gc.Point(peak_locs[n], line_image.offset_y)
+    lr = gc.Point(peak_locs[n+1], line_image.offset_y + line_image.nrows)
 
+    boxes.append(line_image.subimage(ul, lr))
 
 plt.clf()
 plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
