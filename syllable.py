@@ -191,6 +191,7 @@ def knn_search(train_set, test_syl, k = 5):
         closest.append((train_syl,dist))
         max_val = max(closest, key = lambda x: x[1])[1]
 
+    closest.sort(key = lambda x: x[1])
     return closest
 
 if __name__ == "__main__":

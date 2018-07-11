@@ -250,14 +250,13 @@ def _identify_text_lines_and_bunch(input_image):
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
     syllable_list = []
-    box_index = 0
 
     #now perform oversegmentation on each line: get the bounding box around each line, get the
     #horizontal projection for what's inside that bounding box, filter it, find the peaks using
     #log-prominence, draw new bounding boxes around individual letters / parts of letters using
     #the peaks locations found, and finally compute an exhaustive bunching of these boxes
     print('oversegmenting and bunching...')
-    for cl in cc_lines:
+    for line_num, cl in enumerate(cc_lines):
 
         ul, lr = _bounding_box(cl)
         line_image = image_bin.subimage(ul,lr)
@@ -290,8 +289,7 @@ def _identify_text_lines_and_bunch(input_image):
         for b in bunches:
             bunch_image = union_images(b)
             new_syl = syllable.Syllable(image = bunch_image)
-            new_syl.box_index = box_index
-            box_index += 1
+            new_syl.box_index = min(y.offset_x for y in b) + (image_bin.ncols * line_num)
             syllable_list.append(new_syl)
 
     return {'image':image_bin,
@@ -351,39 +349,49 @@ def draw_lines(image, line_locs, horizontal = True):
 if __name__ == "__main__":
 
     #filenames = os.listdir('./png')
-    filenames = ['CF-011_3']
+    #filenames = ['CF-011_3']
+    #for fn in filenames:
+    fn = 'CF-011_3'
 
-    for fn in filenames:
+    print('processing ' + fn + '...')
 
-        print('processing ' + fn + '...')
+    image = gc.load_image('./png/' + fn + '.png')
+    processed_image = _identify_text_lines_and_bunch(image)
+    image = processed_image['image']
+    manuscript_syls = processed_image['sliced']
+    peak_locs = processed_image['peaks']
+    cc_lines = processed_image['cc_lines']
 
-        image = gc.load_image('./png/' + fn + '.png')
-        processed_image = _identify_text_lines_and_bunch(image)
-        image = processed_image['image']
-        manuscript_syls = processed_image['sliced']
-        peak_locs = processed_image['peaks']
-        cc_lines = processed_image['cc_lines']
+    transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
 
-        transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
+    #normalize extracted features
+    all_syls = manuscript_syls + transcript_syls
 
-        #normalize extracted features
-        all_syls = manuscript_syls + transcript_syls
+    for fk in all_syls[0].features.keys():
+        avg = np.mean([x.features[fk] for x in all_syls])
+        std = np.std([x.features[fk] for x in all_syls])
+        for n in range(len(manuscript_syls)):
+            manuscript_syls[n].features[fk] = (manuscript_syls[n].features[fk] - avg) / std
+        for n in range(len(transcript_syls)):
+            transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
 
-        for fk in all_syls[0].features.keys():
-            avg = np.mean([x.features[fk] for x in all_syls])
-            std = np.std([x.features[fk] for x in all_syls])
-            for n in range(len(manuscript_syls)):
-                manuscript_syls[n].features[fk] = (manuscript_syls[n].features[fk] - avg) / std
-            for n in range(len(transcript_syls)):
-                transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
+    print('performing comparisons...')
+    seq_matr = []
+    for ts in transcript_syls:
+        res = syllable.knn_search(manuscript_syls, ts, 35)
+        #found_syl = min(res, key = lambda x: x[1])[0]
+        found_syls = [x[0] for x in res]
+        ts.candidate_syls = found_syls
+        box_indices = sorted([x.box_index for x in found_syls])
+        seq_matr.append(box_indices)
 
-        print('performing comparisons...')
-        for ts in transcript_syls:
-            res = syllable.knn_search(manuscript_syls, ts, 50)
-            #found_syl = min(res, key = lambda x: x[1])[0]
-            found_syls = [x[0] for x in res]
-            ts.predicted_syllable = found_syls
-
+    #find diagonal path thru seq_matr that is strictly increasing
+    current_position = 0
+    for i, ts in enumerate(transcript_syls):
+        following_syls = [x for x in ts.candidate_syls if x.box_index >= current_position]
+        next_syl = min(following_syls, key = lambda x: x.box_index)
+        ts.identified_syl = next_syl
+        current_position = next_syl.box_index
 
 # temp = draw_lines(image,[x + line_image.offset_x for x in peak_locs],False)
 # imsv(temp)
