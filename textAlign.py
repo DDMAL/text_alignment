@@ -119,7 +119,7 @@ def _bounding_box(cc_list):
 
     return ul, lr
 
-def _calculate_peak_prominence(data,index):
+def _calculate_peak_prominence(data, index):
     '''
     returns the log of the prominence of the peak at a given index in a given dataset. peak
     prominence gives high values to relatively isolated peaks and low values to peaks that are
@@ -180,7 +180,7 @@ def _find_peak_locations(data, tol = prominence_tolerance):
     peak_locs = [x[0] for x in prominences if x[1] > tol]
     return peak_locs
 
-def _moving_avg_filter(data,filter_size):
+def _moving_avg_filter(data, filter_size):
     '''
     returns a list containing the data in @data filtered through a moving-average filter of size
     @filter_size to either side; that is, filter_size = 1 gives a size of 3, filter size = 2 gives
@@ -205,12 +205,11 @@ def _identify_text_lines_and_bunch(input_image):
     image_bin.despeckle(despeckle_amt)
 
     #compute y-axis projection of input image and filter with sliding window average
-    print('smoothing projection...')
+    print('finding projection peaks...')
     project = image_bin.projection_rows()
     smoothed_projection = _moving_avg_filter(project,filter_size)
 
     #calculate normalized log prominence of all peaks in projection
-    print('calculating log prominence of peaks...')
     prominences = [(i, _calculate_peak_prominence(smoothed_projection, i)) for i in range(len(smoothed_projection))]
     prom_max = max([x[1] for x in prominences])
     prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
@@ -250,8 +249,8 @@ def _identify_text_lines_and_bunch(input_image):
     #remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-
     syllable_list = []
+    box_index = 0
 
     #now perform oversegmentation on each line: get the bounding box around each line, get the
     #horizontal projection for what's inside that bounding box, filter it, find the peaks using
@@ -286,10 +285,14 @@ def _identify_text_lines_and_bunch(input_image):
             boxes.append(image_bin.subimage(ul, lr).trim_image())
 
         bunches = _exhaustively_bunch(boxes)
+        bunches.sort(key = lambda x: min(y.offset_x for y in x))
 
         for b in bunches:
             bunch_image = union_images(b)
-            syllable_list.append(syllable.Syllable(image = bunch_image))
+            new_syl = syllable.Syllable(image = bunch_image)
+            new_syl.box_index = box_index
+            box_index += 1
+            syllable_list.append(new_syl)
 
     return {'image':image_bin,
             'sliced':syllable_list,
@@ -355,12 +358,12 @@ if __name__ == "__main__":
         print('processing ' + fn + '...')
 
         image = gc.load_image('./png/' + fn + '.png')
-        res = _identify_text_lines_and_bunch(image)
-        image = res['image']
-        manuscript_syls = res['sliced']
-        peak_locs = res['peaks']
-        cc_lines = res['cc_lines']
-mau
+        processed_image = _identify_text_lines_and_bunch(image)
+        image = processed_image['image']
+        manuscript_syls = processed_image['sliced']
+        peak_locs = processed_image['peaks']
+        cc_lines = processed_image['cc_lines']
+
         transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
 
         #normalize extracted features

@@ -41,6 +41,7 @@ class Syllable(object):
             self.image = image
             self.text = None
 
+        self.box_index = None
         self._extract_features()
 
         self.ul = gc.Point(self.image.offset_x,self.image.offset_y)
@@ -48,6 +49,11 @@ class Syllable(object):
             self.image.offset_x + self.image.ncols,
             self.image.offset_y + self.image.nrows
             )
+
+        self.left = self.image.offset_x
+        self.up = self.image.offset_y
+        self.right = self.image.offset_x + self.image.ncols
+        self.down = self.image.offset_y + self.image.nrows
 
     def _index_in_seq(self, subseq, seq):
         i, n, m = -1, len(seq), len(subseq)
