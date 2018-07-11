@@ -17,7 +17,7 @@ filter_size = 20                #size of moving-average filter used to smooth pr
 prominence_tolerance = 0.85      #y-axis projection peaks must be at least this prominent
 
 collision_strip_size = 50       #in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 50   #value in pixels
+horizontal_gap_tolerance = 20   #value in pixels
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision = collision_strip_size):
     """
@@ -76,7 +76,7 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     return result, gap_sizes
 
-def _exhaustively_bunch_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 4):
+def _exhaustively_bunch_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
     '''
     given a list of connected components on a single line (assumed to be in order from left
     to right), groups them into all possible bunches of up to max_num_ccs consecutive
@@ -148,9 +148,7 @@ def _calculate_peak_prominence(data,index):
     else:
         closest_right_ind = np.inf
 
-    #this <= ensures that on flat-topped peaks, the rightmost side of the peak will be designated
-    #as the most prominent one
-    left_peaks = [x for x in higher_peaks_inds if x <= index]
+    left_peaks = [x for x in higher_peaks_inds if x < index]
     if left_peaks:
         closest_left_ind = max(left_peaks)
     else:
@@ -304,12 +302,17 @@ def plot(inp):
     asdf = plt.plot(inp,c='black',linewidth=0.5)
     plt.savefig("testplot.png",dpi=800)
 
-def draw_horizontal_lines(image,line_locs):
-
+def draw_lines(image, line_locs, horizontal = True):
+    new = image.image_copy()
     for l in line_locs:
-        start = gc.FloatPoint(0,l)
-        end = gc.FloatPoint(image.ncols,l)
-        image.draw_line(start, end, 1, 5)
+        if horizontal:
+            start = gc.FloatPoint(0,l)
+            end = gc.FloatPoint(image.ncols,l)
+        else:
+            start = gc.FloatPoint(l,0)
+            end = gc.FloatPoint(l,image.nrows)
+        new.draw_line(start, end, 1, 5)
+    return new
 
 if __name__ == "__main__":
 
@@ -357,6 +360,7 @@ line_image = image.subimage(ul,lr)
 proj = line_image.projection_cols()
 proj = [max(proj) - x for x in proj] #reverse it
 char_filter_size = 5
+letter_horizontal_tolerance = 3
 smoothed_proj = _moving_avg_filter(proj,char_filter_size)
 
 prominences = [(i, _calculate_peak_prominence(smoothed_proj, i)) for i in range(len(smoothed_proj))]
@@ -364,15 +368,33 @@ prom_max = max([x[1] for x in prominences])
 prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
 peak_locs = [x[0] for x in prominences if x[1] > prominence_tolerance]
 
+#possible that two peaks are close together if they are equal (flat-topped peak) so remove
+#peak positions that are too close to other components
+peak_locs = [x for i, x in enumerate(peak_locs)
+    if (i == 0) or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
+
 boxes = []
 for n in range(len(peak_locs) - 1):
 
-    ul = gc.Point(peak_locs[n], line_image.offset_y)
-    lr = gc.Point(peak_locs[n+1], line_image.offset_y + line_image.nrows)
+    #if everything between these peaks is empty, then skip it
+    if all([x == max(smoothed_proj) for x in smoothed_proj[peak_locs[n]:peak_locs[n+1]]]):
+        continue
 
-    boxes.append(line_image.subimage(ul, lr))
+    ul = gc.Point(line_image.offset_x + peak_locs[n], line_image.offset_y)
+    lr = gc.Point(line_image.offset_x + peak_locs[n+1], line_image.offset_y + line_image.nrows)
+    boxes.append(image.subimage(ul, lr).trim_image())
+
+bunched = _exhaustively_bunch_ccs(boxes)
+
+# temp = draw_lines(image,[x + line_image.offset_x for x in peak_locs],False)
+# imsv(temp)
+
+# for b in bunched:
+#    ub = union_images(b)
+#    image.draw_hollow_rect(ub.ul,ub.lr,1,5)
+# imsv(image)
 
 plt.clf()
-plt.scatter([x[0] for x in prominences],[x[1] for x in prominences],s=5)
-plt.plot([x / max(smoothed_proj) for x in smoothed_proj],linewidth=1,color='k')
-plt.savefig("testplot " + filename + ".png",dpi=800)
+plt.scatter([x[0] for x in prominences], [x[1] for x in prominences], s = 5)
+plt.plot([x / max(smoothed_proj) for x in smoothed_proj], linewidth=1, color='k')
+plt.savefig("testplot " + filename + ".png", dpi=800)
