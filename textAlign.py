@@ -76,7 +76,7 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     return result, gap_sizes
 
-def _exhaustively_bunch_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
+def _exhaustively_bunch(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
     '''
     given a list of connected components on a single line (assumed to be in order from left
     to right), groups them into all possible bunches of up to max_num_ccs consecutive
@@ -172,6 +172,14 @@ def _calculate_peak_prominence(data,index):
 
     return prominence
 
+def _find_peak_locations(data, tol = prominence_tolerance):
+    prominences = [(i, _calculate_peak_prominence(data, i))
+        for i in range(len(data))]
+    prom_max = max([x[1] for x in prominences])
+    prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
+    peak_locs = [x[0] for x in prominences if x[1] > tol]
+    return peak_locs
+
 def _moving_avg_filter(data,filter_size):
     '''
     returns a list containing the data in @data filtered through a moving-average filter of size
@@ -184,7 +192,7 @@ def _moving_avg_filter(data,filter_size):
         smoothed[n] = np.mean(vals)
     return smoothed
 
-def _identify_text_lines_and_group_ccs(input_image):
+def _identify_text_lines_and_bunch(input_image):
     #find likely rotation angle and correct
     print('correcting rotation...')
     image_grey = input_image.to_greyscale()
@@ -242,26 +250,49 @@ def _identify_text_lines_and_group_ccs(input_image):
     #remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-    #group together connected components on the same line into bunches assumed
-    #to be composed of whole words or multiple words
 
-    print('bunching connected components....')
-    manuscript_syllables = []
+    syllable_list = []
 
-    #manuscript_syllables is a list of lists; each top-level entry corresponds to another line in
-    #the manuscript, and each sublist contains bunches of connected components
-    for n in range(len(cc_lines)):
-        bunches = _exhaustively_bunch_ccs(cc_lines[n])
-        syllable_list = []
+    #now perform oversegmentation on each line: get the bounding box around each line, get the
+    #horizontal projection for what's inside that bounding box, filter it, find the peaks using
+    #log-prominence, draw new bounding boxes around individual letters / parts of letters using
+    #the peaks locations found, and finally compute an exhaustive bunching of these boxes
+    print('oversegmenting and bunching...')
+    for cl in cc_lines:
+
+        ul, lr = _bounding_box(cl)
+        line_image = image_bin.subimage(ul,lr)
+        line_proj = line_image.projection_cols()
+        line_proj = [max(line_proj) - x for x in line_proj] #reverse it
+        char_filter_size = 5
+        letter_horizontal_tolerance = 3
+        smooth_line_proj = _moving_avg_filter(line_proj,char_filter_size)
+
+        peak_locs = _find_peak_locations(smooth_line_proj)
+        peak_locs = [x for i, x in enumerate(peak_locs)
+            if (i == 0) or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
+
+        boxes = []
+        for n in range(len(peak_locs) - 1):
+
+            #if everything between these peaks is empty, then skip it
+            if all([x == max(smooth_line_proj) for x in smooth_line_proj[peak_locs[n]:peak_locs[n+1]]]):
+                continue
+
+            ul = gc.Point(line_image.offset_x + peak_locs[n], line_image.offset_y)
+            lr = gc.Point(
+                line_image.offset_x + peak_locs[n+1],
+                line_image.offset_y + line_image.nrows)
+            boxes.append(image_bin.subimage(ul, lr).trim_image())
+
+        bunches = _exhaustively_bunch(boxes)
 
         for b in bunches:
             bunch_image = union_images(b)
             syllable_list.append(syllable.Syllable(image = bunch_image))
 
-        manuscript_syllables += syllable_list
-
     return {'image':image_bin,
-            'ccs':manuscript_syllables,
+            'sliced':syllable_list,
             'peaks':peak_locations,
             'cc_lines':cc_lines,
             'projection':smoothed_projection}
@@ -324,9 +355,9 @@ if __name__ == "__main__":
         print('processing ' + fn + '...')
 
         image = gc.load_image('./png/' + fn + '.png')
-        res = _identify_text_lines_and_group_ccs(image)
+        res = _identify_text_lines_and_bunch(image)
         image = res['image']
-        manuscript_syls = res['ccs']
+        manuscript_syls = res['sliced']
         peak_locs = res['peaks']
         cc_lines = res['cc_lines']
 
@@ -343,11 +374,6 @@ if __name__ == "__main__":
             for n in range(len(transcript_syls)):
                 transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
 
-        # for syl in manuscript_syllables:
-        #     image.draw_hollow_rect(syl.ul,syl.lr,1,5)
-        # draw_horizontal_lines(image,peak_locs)
-        # imsv(image,fn)
-
         print('performing comparisons...')
         for ts in transcript_syls:
             res = syllable.knn_search(manuscript_syls, ts, 5)
@@ -355,36 +381,6 @@ if __name__ == "__main__":
             found_syls = [x[0] for x in res]
             ts.predicted_syllable = found_syls
 
-ul, lr = _bounding_box(cc_lines[4])
-line_image = image.subimage(ul,lr)
-proj = line_image.projection_cols()
-proj = [max(proj) - x for x in proj] #reverse it
-char_filter_size = 5
-letter_horizontal_tolerance = 3
-smoothed_proj = _moving_avg_filter(proj,char_filter_size)
-
-prominences = [(i, _calculate_peak_prominence(smoothed_proj, i)) for i in range(len(smoothed_proj))]
-prom_max = max([x[1] for x in prominences])
-prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
-peak_locs = [x[0] for x in prominences if x[1] > prominence_tolerance]
-
-#possible that two peaks are close together if they are equal (flat-topped peak) so remove
-#peak positions that are too close to other components
-peak_locs = [x for i, x in enumerate(peak_locs)
-    if (i == 0) or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
-
-boxes = []
-for n in range(len(peak_locs) - 1):
-
-    #if everything between these peaks is empty, then skip it
-    if all([x == max(smoothed_proj) for x in smoothed_proj[peak_locs[n]:peak_locs[n+1]]]):
-        continue
-
-    ul = gc.Point(line_image.offset_x + peak_locs[n], line_image.offset_y)
-    lr = gc.Point(line_image.offset_x + peak_locs[n+1], line_image.offset_y + line_image.nrows)
-    boxes.append(image.subimage(ul, lr).trim_image())
-
-bunched = _exhaustively_bunch_ccs(boxes)
 
 # temp = draw_lines(image,[x + line_image.offset_x for x in peak_locs],False)
 # imsv(temp)
@@ -394,7 +390,7 @@ bunched = _exhaustively_bunch_ccs(boxes)
 #    image.draw_hollow_rect(ub.ul,ub.lr,1,5)
 # imsv(image)
 
-plt.clf()
-plt.scatter([x[0] for x in prominences], [x[1] for x in prominences], s = 5)
-plt.plot([x / max(smoothed_proj) for x in smoothed_proj], linewidth=1, color='k')
-plt.savefig("testplot " + filename + ".png", dpi=800)
+# plt.clf()
+# plt.scatter([x[0] for x in prominences], [x[1] for x in prominences], s = 5)
+# plt.plot([x / max(smoothed_proj) for x in smoothed_proj], linewidth=1, color='k')
+# plt.savefig("testplot " + filename + ".png", dpi=800)
