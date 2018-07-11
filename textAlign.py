@@ -14,7 +14,7 @@ despeckle_amt = 100             #an int in [1,100]: ignore ccs with area smaller
 noise_area_thresh = 500        #an int in : ignore ccs with area smaller than this
 
 filter_size = 20                #size of moving-average filter used to smooth projection
-prominence_tolerance = 0.85      #y-axis projection peaks must be at least this prominent
+prominence_tolerance = 0.90      #y-axis projection peaks must be at least this prominent
 
 collision_strip_size = 50       #in [0,inf]; amt of each cc to consider when clipping
 horizontal_gap_tolerance = 20   #value in pixels
@@ -76,7 +76,7 @@ def _group_ccs(cc_list, gap_tolerance = horizontal_gap_tolerance):
 
     return result, gap_sizes
 
-def _exhaustively_bunch(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 5):
+def _exhaustively_bunch(cc_list, gap_tolerance = horizontal_gap_tolerance, max_num_ccs = 7):
     '''
     given a list of connected components on a single line (assumed to be in order from left
     to right), groups them into all possible bunches of up to max_num_ccs consecutive
@@ -360,7 +360,7 @@ if __name__ == "__main__":
         manuscript_syls = res['sliced']
         peak_locs = res['peaks']
         cc_lines = res['cc_lines']
-
+mau
         transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
 
         #normalize extracted features
@@ -376,7 +376,7 @@ if __name__ == "__main__":
 
         print('performing comparisons...')
         for ts in transcript_syls:
-            res = syllable.knn_search(manuscript_syls, ts, 5)
+            res = syllable.knn_search(manuscript_syls, ts, 50)
             #found_syl = min(res, key = lambda x: x[1])[0]
             found_syls = [x[0] for x in res]
             ts.predicted_syllable = found_syls

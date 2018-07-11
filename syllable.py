@@ -129,7 +129,7 @@ class Syllable(object):
         for i,f in enumerate(skeleton_feats):
             res['skeleton_' + str(i)] = f
 
-        volume_feats = self.image.volume16regions()
+        volume_feats = self.image.volume64regions()
         for i,f in enumerate(volume_feats):
             res['volume_region_' + str(i)] = f
 
@@ -160,10 +160,10 @@ def knn_search(train_set, test_syl, k = 5):
 
     feature_keys = train_set[0].features.keys()
     closest = [(None, np.inf)]
+    max_val = np.inf
 
     for train_syl in train_set:
         dist = 0
-        max_val = np.inf
 
         for fk in feature_keys:
             df = test_syl.features[fk] - train_syl.features[fk]
@@ -173,17 +173,15 @@ def knn_search(train_set, test_syl, k = 5):
             if dist > max_val:
                 break
 
-        if len(closest) < k:
-            closest.append((train_syl,dist))
-            continue
-
         if dist > max_val:
             continue
 
         #if we didn't break out early, this is a candidate for entry
         #key with max value
-        max_key = max(closest, key = lambda x: x[1])
-        closest.remove(max_key)
+        if len(closest) >= k:
+            max_key = max(closest, key = lambda x: x[1])
+            closest.remove(max_key)
+
         closest.append((train_syl,dist))
         max_val = max(closest, key = lambda x: x[1])[1]
 
