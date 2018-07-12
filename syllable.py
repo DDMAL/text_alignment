@@ -13,7 +13,7 @@ class Syllable(object):
 
     letters_path = './letters/'
     letter_list = (
-        'cae cre est rex nus sti tri'.split() +
+        'cae cre est rex nus sti tet tri'.split() +
         'ae be bo ca ch ci co cu de do ec es et fa fe fi fo gr pe po ra sa se si sp sr ss st su sy ta te ti tu us vo'.split() +
         'a b c d e f g h i j l m n o p q r s t u v x y'.split()
         )
@@ -50,6 +50,8 @@ class Syllable(object):
             self.image.offset_y + self.image.nrows
             )
 
+        self.nrows = self.image.nrows
+        self.ncols = self.image.ncols
         self.left = self.image.offset_x
         self.up = self.image.offset_y
         self.right = self.image.offset_x + self.image.ncols

@@ -210,10 +210,7 @@ def _identify_text_lines_and_bunch(input_image):
     smoothed_projection = _moving_avg_filter(project,filter_size)
 
     #calculate normalized log prominence of all peaks in projection
-    prominences = [(i, _calculate_peak_prominence(smoothed_projection, i)) for i in range(len(smoothed_projection))]
-    prom_max = max([x[1] for x in prominences])
-    prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
-    peak_locations = [x[0] for x in prominences if x[1] > prominence_tolerance]
+    peak_locations = _find_peak_locations(smoothed_projection)
 
     #perform connected component analysis and remove sufficiently small ccs and ccs that are too
     #tall; assume these to be ornamental letters
@@ -378,21 +375,25 @@ if __name__ == "__main__":
     print('performing comparisons...')
     seq_matr = []
     for ts in transcript_syls:
-        res = syllable.knn_search(manuscript_syls, ts, 35)
+        res = syllable.knn_search(manuscript_syls, ts, 1200)
         #found_syl = min(res, key = lambda x: x[1])[0]
+        ts.candidate_syls = res
         found_syls = [x[0] for x in res]
-        ts.candidate_syls = found_syls
         box_indices = sorted([x.box_index for x in found_syls])
         seq_matr.append(box_indices)
 
     #find diagonal path thru seq_matr that is strictly increasing
     current_position = 0
     for i, ts in enumerate(transcript_syls):
-        following_syls = [x for x in ts.candidate_syls if x.box_index >= current_position]
-        next_syl = min(following_syls, key = lambda x: x.box_index)
-        ts.identified_syl = next_syl
-        current_position = next_syl.box_index
+        following_syls = [x for x in ts.candidate_syls if x[0].box_index >= current_position]
+        next_syl = min(following_syls, key = lambda x: x[0].box_index)
+        print(len(following_syls),current_position,next_syl[0].box_index,ts.text)
+        ts.identified_syl = next_syl[0]
+        current_position = next_syl[0].box_index + next_syl[0].ncols
 
+    for ids in [x.identified_syl for x in transcript_syls]:
+        image.draw_hollow_rect(ids.ul,ids.lr,1,5)
+    imsv(image)
 # temp = draw_lines(image,[x + line_image.offset_x for x in peak_locs],False)
 # imsv(temp)
 
