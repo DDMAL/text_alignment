@@ -326,6 +326,12 @@ def draw_syl_boxes_imsv(img,syl):
         new_img.draw_hollow_rect(ps.ul,ps.lr,1,9)
     imsv(new_img)
 
+def two_boxes(img, tran_syls, pred_syls, index):
+    new_img = union_images([img.image_copy(), tran_syls[index].image])
+    new_img.draw_hollow_rect(tran_syls[index].ul,tran_syls[index].lr,1,6)
+    new_img.draw_hollow_rect(pred_syls[index][0].ul,pred_syls[index][0].lr,1,6)
+    imsv(new_img)
+
 def plot(inp):
     plt.clf()
     asdf = plt.plot(inp,c='black',linewidth=0.5)
@@ -373,27 +379,90 @@ if __name__ == "__main__":
             transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
 
     print('performing comparisons...')
-    seq_matr = []
+    seq_arr = []
     for ts in transcript_syls:
         res = syllable.knn_search(manuscript_syls, ts, 1200)
         #found_syl = min(res, key = lambda x: x[1])[0]
-        ts.candidate_syls = res
-        found_syls = [x[0] for x in res]
-        box_indices = sorted([x.box_index for x in found_syls])
-        seq_matr.append(box_indices)
+        seq_arr.append(res)
 
-    #find diagonal path thru seq_matr that is strictly increasing
+    #find diagonal path that is strictly increasing with minimum total weight
+    #s is list of candidates for the current syllable
+    print('finding optimal alignment...')
+    identified_syls = []
     current_position = 0
-    for i, ts in enumerate(transcript_syls):
-        following_syls = [x for x in ts.candidate_syls if x[0].box_index >= current_position]
+    for s in seq_arr:
+        following_syls = [x for x in s if x[0].box_index >= current_position]
         next_syl = min(following_syls, key = lambda x: x[0].box_index)
-        print(len(following_syls),current_position,next_syl[0].box_index,ts.text)
-        ts.identified_syl = next_syl[0]
+        identified_syls.append(next_syl)
         current_position = next_syl[0].box_index + next_syl[0].ncols
 
-    for ids in [x.identified_syl for x in transcript_syls]:
-        image.draw_hollow_rect(ids.ul,ids.lr,1,5)
-    imsv(image)
+    #hopefully, this will reach the end of the manuscript! if not, then the transcript definitely
+    #has material that extends past the end of the transcript
+    current_position = 0
+    criteria_met = False
+    while not criteria_met:
+
+        replacements = []
+
+        #headroom is the space each syllable has to itself horizontally, a range
+        for i, current_syl in enumerate(identified_syls):
+
+            cur_candidates = seq_arr[i]
+
+            if i == 0:
+                left = 0
+            else:
+                prev = identified_syls[i - 1][0]
+                left = prev.box_index + prev.ncols
+
+            if i == len(identified_syls) - 1:
+                right == np.inf
+            else:
+                right = identified_syls[i + 1][0].box_index
+
+            headroom = (left, right)
+
+            #find just the candidates that are inside of the headroom range
+
+            clip_candidates = [x for x in cur_candidates
+                if left <= x[0].box_index <= right
+                and left <= x[0].box_index + x[0].ncols <= right
+                and x[0] != current_syl]
+
+            if not bool(clip_candidates):
+                replacements.append((None, -1))
+            else:
+                best_candidate = min(clip_candidates, key = lambda x: x[1])
+                difference = current_syl[1] - best_candidate[1]
+                replacements.append((best_candidate, difference))
+
+        if all([x[1] <= 0 for x in replacements]):
+            criteria_met = True
+            continue
+
+        #find the section that can be expanded yielding the largest reduction in weight
+        best_replacement_ind = max(range(len(replacements)),
+            key = lambda x: replacements[x][1])
+        best_replacement = replacements[best_replacement_ind][0]
+        print(replacements[best_replacement_ind])
+        identified_syls[best_replacement_ind] = best_replacement
+
+    # for ids in [x[0] for x in identified_syls]:
+    #     image.draw_hollow_rect(ids.ul,ids.lr,1,5)
+    # imsv(image)
+
+
+
+    # current_position = 0
+    # for i, ts in enumerate(transcript_syls):
+    #     following_syls = [x for x in ts.candidate_syls if x[0].box_index >= current_position]
+    #     next_syl = min(following_syls, key = lambda x: x[0].box_index)
+    #     print(len(following_syls),current_position,next_syl[0].box_index,ts.text)
+    #     ts.identified_syl = next_syl[0]
+    #     current_position = next_syl[0].box_index + next_syl[0].ncols
+
+
+
 # temp = draw_lines(image,[x + line_image.offset_x for x in peak_locs],False)
 # imsv(temp)
 
