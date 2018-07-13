@@ -6,6 +6,7 @@ import numpy as np
 
 from gamera.plugins.image_utilities import union_images
 
+
 class Syllable(object):
 
     gap_ignore = 10
@@ -18,14 +19,14 @@ class Syllable(object):
         'a b c d e f g h i j l m n o p q r s t u v x y'.split()
         )
 
-    #necessary to use a helper function to load images into a dictionary comprehension because
-    #python does strange things to scope in the expression part of a comprehension (????????)
-    def _dict_helper(A,B):
-        return {x:gc.load_image(A + x + '.png').to_onebit() for x in B}
+    # necessary to use a helper function to load images into a dictionary comprehension because
+    # python does strange things to scope in the expression part of a comprehension (????????)
+    def _dict_helper(A, B):
+        return {x: gc.load_image(A + x + '.png').to_onebit() for x in B}
 
-    chunk_images = _dict_helper(letters_path,letter_list)
+    chunk_images = _dict_helper(letters_path, letter_list)
 
-    def __init__ (self, text = None, image = None):
+    def __init__(self, text=None, image=None):
 
         if not (bool(text) ^ bool(image)):
             raise ValueError('Supply an image or text, but not both')
@@ -44,7 +45,7 @@ class Syllable(object):
         self.box_index = None
         self._extract_features()
 
-        self.ul = gc.Point(self.image.offset_x,self.image.offset_y)
+        self.ul = gc.Point(self.image.offset_x, self.image.offset_y)
         self.lr = gc.Point(
             self.image.offset_x + self.image.ncols,
             self.image.offset_y + self.image.nrows
@@ -63,7 +64,7 @@ class Syllable(object):
             while True:
                 i = seq.index(subseq[0], i + 1, n - m + 1)
                 if subseq == seq[i:i + m]:
-                   return i
+                    return i
         except ValueError:
             return -1
 
@@ -72,38 +73,37 @@ class Syllable(object):
 
         for chunk in self.letter_list:
             l = list(chunk)
-            index = self._index_in_seq(l,result)
+            index = self._index_in_seq(l, result)
 
             while index != -1:
                 result = result[:index] + result[index + len(chunk):]
                 result.insert(index, "@" + chunk)
-                index = self._index_in_seq(l,result)
+                index = self._index_in_seq(l, result)
 
-        result[:] = [r.replace('@','') for r in result]
+        result[:] = [r.replace('@', '') for r in result]
 
         self.resolved_text = result
 
     def _make_image(self):
-        #given a list of individual chunk images, stitch them together into an image of a syllable.
+        # given a list of individual chunk images, stitch them together into an image of a syllable.
         #
         ims = [Syllable.chunk_images[x] for x in self.resolved_text]
 
         padding = 1
         height = max(x.nrows for x in ims)
         width = sum(x.ncols for x in ims) + (padding * (len(ims) - 1))
-        result = gc.Image(gc.Point(0,0),gc.Point(width,height))
+        result = gc.Image(gc.Point(0, 0), gc.Point(width, height))
 
         cur_left_bound = 0
 
         for img in ims:
 
-            for coord in itertools.product(range(img.ncols),range(img.nrows)):
+            for coord in itertools.product(range(img.ncols), range(img.nrows)):
                 trans_down = result.nrows - img.nrows
                 new_coord = (coord[0] + cur_left_bound, coord[1] + trans_down)
-                result.set(new_coord,img.get(coord))
+                result.set(new_coord, img.get(coord))
 
             cur_left_bound += padding + img.ncols
-
 
         self.image = result.trim_image()
 
@@ -160,7 +160,8 @@ class Syllable(object):
 #
 #     return dist
 
-def knn_search(train_set, test_syl, k = 5):
+
+def knn_search(train_set, test_syl, k=5):
     '''
     given a list of syllables as a train set and a single syllable to search for, returns the
     nearest syllable to the test syllable in the feature space.
@@ -177,26 +178,28 @@ def knn_search(train_set, test_syl, k = 5):
             df = test_syl.features[fk] - train_syl.features[fk]
             dist += df * df
 
-            #break out early if possible
+            # break out early if possible
             if dist > max_val:
                 break
 
         if dist > max_val:
             continue
 
-        #if we didn't break out early, this is a candidate for entry
-        #key with max value
+        # if we didn't break out early, this is a candidate for entry
+        # key with max value
         if len(closest) >= k:
-            max_key = max(closest, key = lambda x: x[1])
+            max_key = max(closest, key=lambda x: x[1])
             closest.remove(max_key)
 
-        closest.append((train_syl,dist))
-        max_val = max(closest, key = lambda x: x[1])[1]
+        closest.append((train_syl, dist))
+        max_val = max(closest, key=lambda x: x[1])[1]
 
-    closest.sort(key = lambda x: x[1])
+    closest.sort(key=lambda x: x[1])
     return closest
 
+
 if __name__ == "__main__":
+
     gc.init_gamera()
     asdf = Syllable('domssvo')
     hjkl = Syllable('asdssvo')
