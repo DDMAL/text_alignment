@@ -6,7 +6,6 @@ import numpy as np
 
 from gamera.plugins.image_utilities import union_images
 
-
 class Syllable(object):
 
     gap_ignore = 10
