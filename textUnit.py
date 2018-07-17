@@ -1,7 +1,7 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
 import itertools
-from fastdtw import fastdtw
+# from fastdtw import fastdtw
 import numpy as np
 
 from gamera.plugins.image_utilities import union_images
@@ -199,6 +199,17 @@ def get_prototypes():
     return res
 
 
+def compare_units(a, b):
+    feature_keys = a.features.keys()
+
+    sum = 0
+
+    for fk in feature_keys:
+        sum += (a.features[fk] - b.features[fk]) * (a.features[fk] - b.features[fk])
+
+    return sum
+
+
 class unitSequence(object):
     def __init__(self, seq=None, char_index=None, cost=None):
         if not cost:
@@ -206,15 +217,15 @@ class unitSequence(object):
         else:
             self.cost = cost
 
-        if not cost:
+        if not seq:
             self.seq = []
         else:
             self.seq = seq
 
         if not cost:
-            char_index.seq = 0
+            self.char_index = 0
         else:
-            char_index.seq = char_index
+            self.char_index = char_index
 
 
 

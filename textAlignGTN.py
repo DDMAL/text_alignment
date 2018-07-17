@@ -471,7 +471,26 @@ if __name__ == "__main__":
     # single method that updates state of sequence
     sequences = [textUnit.unitSequence(seq=[first_node])]
 
-    
+    current_seq = sequences[-1]
+    current_head = current_seq.seq[-1]
+    candidates = _next_possible_prototypes(transcript_string[current_seq.char_index:], prototypes)
+    branches = []
+
+    # successors to the node at the head of the current sequence
+    for suc in graph.successors(current_head):
+
+        this_edge_unit = graph[current_head][suc]['object']
+
+        candidate_scores = {}
+
+        for c in candidates.keys():
+            candidate_scores[c] = textUnit.compare_units(candidates[c], this_edge_unit)
+        # compare the image from each edge to each image in candidates
+        # the image that will be chosen is the one with lowest cost
+
+        print(candidate_scores)
+
+
 
 options = {
      'node_color': 'black',
