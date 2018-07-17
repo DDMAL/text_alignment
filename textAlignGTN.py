@@ -302,7 +302,7 @@ def _identify_text_lines_and_bunch(input_image):
             all_nodes.append(previous_node)
 
     edges_to_add = []
-    print('adding additional lines to graph')
+    print('adding additional lines to graph...')
 
     # starting at 3 because edges correspond to image slices and we index through nodes; one node
     # contains no image, and two nodes contain a single image (which is already handled in the
@@ -386,6 +386,37 @@ def _next_possible_prototypes(string, prototypes):
             res[u] = prototypes[u]
 
     return res
+
+
+def _get_branches_of_sequence(current_seq, graph):
+    '''
+    given a sequence and the graph of slice positions, returns all the branches that could be
+    made from the head of that sequence.
+    '''
+    current_head = current_seq.seq[-1]
+    candidates = _next_possible_prototypes(transcript_string[current_seq.char_index:], prototypes)
+    branches = []
+
+    # successors to the node at the head of the current sequence
+    for suc in graph.successors(current_head):
+
+        this_edge_unit = graph[current_head][suc]['object']
+
+        candidate_scores = {}
+
+        # compare the image from each edge to each image in candidates
+        # the image that will be chosen is the one with lowest cost
+        for c in candidates.keys():
+            candidate_scores[c] = textUnit.compare_units(candidates[c], this_edge_unit)
+        chosen_candidate_key = min(candidate_scores)
+
+        new_seq = list(current_seq.seq) + [suc]
+        new_cost = current_seq.cost + candidate_scores[chosen_candidate_key]
+        new_index = current_seq.char_index + len(chosen_candidate_key)
+
+        branches.append(textUnit.unitSequence(new_seq, new_index, new_cost))
+
+    return branches
 
 
 def imsv(img, fname=''):
@@ -472,24 +503,12 @@ if __name__ == "__main__":
     sequences = [textUnit.unitSequence(seq=[first_node])]
 
     current_seq = sequences[-1]
-    current_head = current_seq.seq[-1]
-    candidates = _next_possible_prototypes(transcript_string[current_seq.char_index:], prototypes)
-    branches = []
 
-    # successors to the node at the head of the current sequence
-    for suc in graph.successors(current_head):
+    gen = _get_branches_of_sequence(current_seq, graph)
 
-        this_edge_unit = graph[current_head][suc]['object']
-
-        candidate_scores = {}
-
-        for c in candidates.keys():
-            candidate_scores[c] = textUnit.compare_units(candidates[c], this_edge_unit)
-        # compare the image from each edge to each image in candidates
-        # the image that will be chosen is the one with lowest cost
-
-        print(candidate_scores)
-
+    next_gen = []
+    for s in gen:
+        next_gen += _get_branches_of_sequence(s, graph)
 
 
 options = {

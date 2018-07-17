@@ -227,7 +227,8 @@ class unitSequence(object):
         else:
             self.char_index = char_index
 
-
+    def __repr__(self):
+        return 'cost : {0.cost}, index : {0.char_index}, nodes = {0.seq}'.format(self)
 
 if __name__ == "__main__":
     gc.init_gamera()
