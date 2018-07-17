@@ -2,6 +2,8 @@ import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
+import networkx as nx
+import itertools as iter
 import os
 import re
 import syllable
@@ -17,7 +19,11 @@ filter_size = 20                # size of moving-average filter used to smooth p
 prominence_tolerance = 0.90      # y-axis projection peaks must be at least this prominent
 
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 20   # value in pixels
+horizontal_gap_tolerance = 30
+
+char_filter_size = 5
+letter_horizontal_tolerance = 7
+max_num_ccs = 7
 
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
@@ -79,7 +85,7 @@ def _group_ccs(cc_list, gap_tolerance=horizontal_gap_tolerance):
     return result, gap_sizes
 
 
-def _exhaustively_bunch(cc_list, gap_tolerance=horizontal_gap_tolerance, max_num_ccs=7):
+def _exhaustively_bunch(cc_list, gap_tolerance=horizontal_gap_tolerance, max_num_ccs=max_num_ccs):
     '''
     given a list of connected components on a single line (assumed to be in order from left
     to right), groups them into all possible bunches of up to max_num_ccs consecutive
@@ -227,8 +233,8 @@ def _identify_text_lines_and_bunch(input_image):
     med_comp_height = np.median([c.nrows for c in components])
     components[:] = [c for c in components if c.black_area()[0] > noise_area_thresh and c.nrows < (med_comp_height * 2)]
 
-    # using the peak locations found earlier, find all connected components that are intersected by a
-    # horizontal strip at either edge of each line. these are the lines of text in the manuscript
+    # using the peak locations found earlier, find all connected components that are intersected by
+    # a horizontal strip at either edge of each line. these are the lines of text in the manuscript
     print('intersecting connected components with text lines...')
     cc_lines = []
     for line_loc in peak_locations:
@@ -255,27 +261,31 @@ def _identify_text_lines_and_bunch(input_image):
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
     syllable_list = []
+    graph = nx.DiGraph()
+    previous_node = (0, 0)
+    all_nodes = []
+    all_nodes.append(previous_node)
+    graph.add_node(previous_node)
 
     # now perform oversegmentation on each line: get the bounding box around each line, get the
     # horizontal projection for what's inside that bounding box, filter it, find the peaks using
     # log-prominence, draw new bounding boxes around individual letters / parts of letters using
-    # the peaks locations found, and finally compute an exhaustive bunching of these boxes
-    print('oversegmenting and bunching...')
+    # the peaks locations found, and create a directed straight-line graph
+    print('oversegmenting and building initial graph...')
     for line_num, cl in enumerate(cc_lines):
 
         ul, lr = _bounding_box(cl)
         line_image = image_bin.subimage(ul, lr)
         line_proj = line_image.projection_cols()
         line_proj = [max(line_proj) - x for x in line_proj]  # reverse it
-        char_filter_size = 5
-        letter_horizontal_tolerance = 3
+
         smooth_line_proj = _moving_avg_filter(line_proj, char_filter_size)
 
         peak_locs = _find_peak_locations(smooth_line_proj)
         peak_locs = [x for i, x in enumerate(peak_locs)
-                     if (i == 0) or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
+                     if (i == 0)
+                     or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
 
-        boxes = []
         for n in range(len(peak_locs) - 1):
 
             # if everything between these peaks is empty, then skip it
@@ -286,19 +296,62 @@ def _identify_text_lines_and_bunch(input_image):
             lr = gc.Point(
                 line_image.offset_x + peak_locs[n+1],
                 line_image.offset_y + line_image.nrows)
-            boxes.append(image_bin.subimage(ul, lr).trim_image())
+            current_box = image_bin.subimage(ul, lr).trim_image()
+            next_node = (line_num, lr.x)
+            graph.add_edge(previous_node, next_node, object=current_box)
+            previous_node = next_node
+            all_nodes.append(previous_node)
 
-        bunches = _exhaustively_bunch(boxes)
-        bunches.sort(key=lambda x: min(y.offset_x for y in x))
+    edges_to_add = []
+    print('adding additional lines to graph')
 
-        for b in bunches:
-            bunch_image = union_images(b)
-            new_syl = syllable.Syllable(image=bunch_image)
-            new_syl.box_index = min(y.offset_x for y in b) + (image_bin.ncols * line_num)
-            syllable_list.append(new_syl)
+    # starting at 3 because edges correspond to image slices and we index through nodes; one node
+    # contains no image, and two nodes contain a single image (which is already handled in the
+    # previous loop. Three nodes contain two edges between them, and thus two images.
+    for current_node, num_nodes in iter.product(all_nodes, range(3, max_num_ccs)):
+        group = [current_node]
+        group_images = []
+        target_node = current_node
+
+        # create list of node identifiers num_nodes long, starting from current_node.
+        # add to group_images the image associated with each edge traversed.
+        is_group_valid = True
+        for i in range(num_nodes - 1):
+            adj_node = graph[group[-1]].keys()
+
+            if not adj_node:
+                is_group_valid = False
+                break
+
+            group.append(adj_node[0])
+            prev = group[i]
+            next = group[i + 1]
+            group_images.append(graph.edges[prev, next]['object'])
+
+        if not is_group_valid:
+            continue
+
+        # we only want to add this as an edge if the images are sufficiently close together that
+        # it makes sense to consider them as a single character or ligature.
+        add_this_group = False
+
+        for i in range(len(group_images) - 1):
+            prev_right = group_images[i].offset_x + group_images[i].ncols
+            next_left = group_images[i + 1].offset_x
+            # also check to make sure distance is greater than -1; if less, then this group
+            # occurs across a line break, and it should be discarded
+            add_this_group = (-1 <= next_left - prev_right <= letter_horizontal_tolerance)
+
+        if (add_this_group):
+            edge_image = union_images(group_images)
+            edges_to_add.append((group[0], group[-1], {'object': edge_image}))
+
+    #add to graph all edges deemed valid
+    graph.add_edges_from(edges_to_add)
 
     return {'image': image_bin,
-            'sliced': syllable_list,
+            'graph': graph,
+            'edges_to_add': edges_to_add,
             'peaks': peak_locations,
             'cc_lines': cc_lines,
             'projection': smoothed_projection}
@@ -375,26 +428,37 @@ if __name__ == "__main__":
     image = gc.load_image('./png/' + fn + '.png')
     processed_image = _identify_text_lines_and_bunch(image)
     image = processed_image['image']
-    manuscript_syls = processed_image['sliced']
+    graph = processed_image['graph']
     peak_locs = processed_image['peaks']
     cc_lines = processed_image['cc_lines']
 
     transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
 
     # normalize extracted features
-    all_syls = manuscript_syls + transcript_syls
+    # all_syls = manuscript_syls + transcript_syls
+    #
+    # for fk in all_syls[0].features.keys():
+    #     avg = np.mean([x.features[fk] for x in all_syls])
+    #     std = np.std([x.features[fk] for x in all_syls])
+    #     for n in range(len(manuscript_syls)):
+    #         manuscript_syls[n].features[fk] = (manuscript_syls[n].features[fk] - avg) / std
+    #     for n in range(len(transcript_syls)):
+    #         transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
+    #
+    # print('performing comparisons...')
+    # seq_arr = []
+    # for ts in transcript_syls:
+    #     res = syllable.knn_search(manuscript_syls, ts, 1200)
+    #     # found_syl = min(res, key = lambda x: x[1])[0]
+    #     seq_arr.append(res)
 
-    for fk in all_syls[0].features.keys():
-        avg = np.mean([x.features[fk] for x in all_syls])
-        std = np.std([x.features[fk] for x in all_syls])
-        for n in range(len(manuscript_syls)):
-            manuscript_syls[n].features[fk] = (manuscript_syls[n].features[fk] - avg) / std
-        for n in range(len(transcript_syls)):
-            transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
-
-    print('performing comparisons...')
-    seq_arr = []
-    for ts in transcript_syls:
-        res = syllable.knn_search(manuscript_syls, ts, 1200)
-        # found_syl = min(res, key = lambda x: x[1])[0]
-        seq_arr.append(res)
+options = {
+     'node_color': 'black',
+     'node_size': 10,
+     'width': 1,
+    }
+plt.clf()
+subgraph_nodes = [x for x in graph.nodes() if x[0] < 2]
+sg = graph.subgraph(subgraph_nodes)
+nx.draw_kamada_kawai(sg, **options)
+plt.savefig('testplot.png', dpi=800)

@@ -6,7 +6,8 @@ import numpy as np
 
 from gamera.plugins.image_utilities import union_images
 
-class Syllable(object):
+
+class testUnit(object):
 
     gap_ignore = 10
     line_step = 4
@@ -145,20 +146,6 @@ class Syllable(object):
             res['moments_' + str(i)] = f
 
         self.features = res
-
-# def compare(A, B):
-#     dist = []
-#
-#     seqs_a = A.sequence_features.values()
-#     seqs_b = B.sequence_features.values()
-#
-#     for n in range(len(seqs_a)):
-#         a_pts = [[i,x] for i,x in enumerate(seqs_a[n])]
-#         b_pts = [[i,x] for i,x in enumerate(seqs_b[n])]
-#         dist.append(fastdtw(a_pts, b_pts)[0])
-#
-#     return dist
-
 
 def knn_search(train_set, test_syl, k=5):
     '''
