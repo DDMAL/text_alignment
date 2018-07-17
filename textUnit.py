@@ -7,9 +7,10 @@ import numpy as np
 from gamera.plugins.image_utilities import union_images
 
 
-class testUnit(object):
+class textUnit(object):
 
     gap_ignore = 10
+
     line_step = 4
 
     letters_path = './letters/'
@@ -19,6 +20,8 @@ class testUnit(object):
         'a b c d e f g h i j l m n o p q r s t u v x y'.split()
         )
 
+    prototypes = {}
+
     # necessary to use a helper function to load images into a dictionary comprehension because
     # python does strange things to scope in the expression part of a comprehension (????????)
     def _dict_helper(A, B):
@@ -26,7 +29,7 @@ class testUnit(object):
 
     chunk_images = _dict_helper(letters_path, letter_list)
 
-    def __init__(self, text=None, image=None):
+    def __init__(self, image=None, text=None):
 
         if not (bool(text) ^ bool(image)):
             raise ValueError('Supply an image or text, but not both')
@@ -53,10 +56,12 @@ class testUnit(object):
 
         self.nrows = self.image.nrows
         self.ncols = self.image.ncols
-        self.left = self.image.offset_x
-        self.up = self.image.offset_y
-        self.right = self.image.offset_x + self.image.ncols
-        self.down = self.image.offset_y + self.image.nrows
+        self.offset_x = self.image.offset_x
+        self.offset_y = self.image.offset_y
+        # self.left = self.image.offset_x
+        # self.up = self.image.offset_y
+        # self.right = self.image.offset_x + self.image.ncols
+        # self.down = self.image.offset_y + self.image.nrows
 
     def _index_in_seq(self, subseq, seq):
         i, n, m = -1, len(seq), len(subseq)
@@ -85,9 +90,9 @@ class testUnit(object):
         self.resolved_text = result
 
     def _make_image(self):
-        # given a list of individual chunk images, stitch them together into an image of a syllable.
+        # given a list of individual chunk images, stitch them together into an image of a textUnit.
         #
-        ims = [Syllable.chunk_images[x] for x in self.resolved_text]
+        ims = [textUnit.chunk_images[x] for x in self.resolved_text]
 
         padding = 1
         height = max(x.nrows for x in ims)
@@ -147,10 +152,11 @@ class testUnit(object):
 
         self.features = res
 
+
 def knn_search(train_set, test_syl, k=5):
     '''
-    given a list of syllables as a train set and a single syllable to search for, returns the
-    nearest syllable to the test syllable in the feature space.
+    given a list of textUnits as a train set and a single textUnit to search for, returns the
+    nearest textUnit to the test textUnit in the feature space.
     '''
 
     feature_keys = train_set[0].features.keys()
@@ -184,8 +190,19 @@ def knn_search(train_set, test_syl, k=5):
     return closest
 
 
-if __name__ == "__main__":
+def get_prototypes():
+    res = {}
 
+    for l in textUnit.letter_list:
+        res[l] = textUnit(text=l)
+
+    return res
+
+
+# class unitSequence(object):
+#    def __init__(self, image=None, text=None):
+
+
+if __name__ == "__main__":
     gc.init_gamera()
-    asdf = Syllable('domssvo')
-    hjkl = Syllable('asdssvo')
+    asdf = get_prototypes()

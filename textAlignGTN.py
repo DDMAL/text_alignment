@@ -6,10 +6,10 @@ import networkx as nx
 import itertools as iter
 import os
 import re
-import syllable
+import textUnit
 from os.path import isfile, join
 import numpy as np
-reload(syllable)
+reload(textUnit)
 
 filename = 'CF-019_3.png'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
@@ -213,7 +213,6 @@ def _identify_text_lines_and_bunch(input_image):
     image_bin = image_grey.to_onebit()
     angle, tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle=angle)
-    # image_bin = image_bin.erode_dilate(2,1,1)
     image_bin.filter_short_runs(3, 'black')
     image_bin.filter_narrow_runs(3, 'black')
     image_bin.despeckle(despeckle_amt)
@@ -346,28 +345,45 @@ def _identify_text_lines_and_bunch(input_image):
             edge_image = union_images(group_images)
             edges_to_add.append((group[0], group[-1], {'object': edge_image}))
 
-    #add to graph all edges deemed valid
+    # add to graph all edges deemed valid
     graph.add_edges_from(edges_to_add)
+
+    # transform the content of every edge from an image in to a textUnit containing that image
+    for nodes in graph.edges:
+        edge_image = graph.edges[nodes[0], nodes[1]]['object']
+        unit = textUnit.textUnit(image=edge_image)
+        graph.edges[nodes[0], nodes[1]]['object'] = unit
 
     return {'image': image_bin,
             'graph': graph,
-            'edges_to_add': edges_to_add,
             'peaks': peak_locations,
             'cc_lines': cc_lines,
-            'projection': smoothed_projection}
+            'projection': smoothed_projection
+            }
 
 
-def _parse_transcript_syllables(filename):
-
-    res = []
-
+def _parse_transcript(filename):
     file = open(filename, 'r')
-    lines = (file.readlines())
+    lines = ''.join(file.readlines())
     file.close()
 
-    for l in lines:
-        phrase = re.split('[\s-]', l)
-        res += [syllable.Syllable(text=x.lower()) for x in phrase if x]
+    lines = lines.lower()
+    lines = lines.replace('\n', '')
+    lines = lines.replace('-', '')
+    lines = lines.replace(' ', '')
+
+    return lines
+
+
+def _next_possible_prototypes(string, prototypes):
+    res = {}
+
+    units = prototypes.keys()
+
+    for u in units:
+        comp = string[0:len(u)]
+        if u == comp:
+            res[u] = prototypes[u]
 
     return res
 
@@ -432,31 +448,32 @@ if __name__ == "__main__":
     peak_locs = processed_image['peaks']
     cc_lines = processed_image['cc_lines']
 
-    transcript_syls = _parse_transcript_syllables('./png/' + fn + '.txt')
+    transcript_string = _parse_transcript('./png/' + fn + '.txt')
 
-    # normalize extracted features
-    # all_syls = manuscript_syls + transcript_syls
-    #
-    # for fk in all_syls[0].features.keys():
-    #     avg = np.mean([x.features[fk] for x in all_syls])
-    #     std = np.std([x.features[fk] for x in all_syls])
-    #     for n in range(len(manuscript_syls)):
-    #         manuscript_syls[n].features[fk] = (manuscript_syls[n].features[fk] - avg) / std
-    #     for n in range(len(transcript_syls)):
-    #         transcript_syls[n].features[fk] = (transcript_syls[n].features[fk] - avg) / std
-    #
-    # print('performing comparisons...')
-    # seq_arr = []
-    # for ts in transcript_syls:
-    #     res = syllable.knn_search(manuscript_syls, ts, 1200)
-    #     # found_syl = min(res, key = lambda x: x[1])[0]
-    #     seq_arr.append(res)
+    prototypes = textUnit.get_prototypes()
+
+    manuscript_units = [graph[x[0]][x[1]]['object'] for x in graph.edges]
+
+    # normalize features over all units
+    all_units = manuscript_units + prototypes.values()
+
+    for fk in all_units[0].features.keys():
+        avg = np.mean([x.features[fk] for x in all_units])
+        std = np.std([x.features[fk] for x in all_units])
+
+        for n in range(len(all_units)):
+            all_units[n].features[fk] = (all_units[n].features[fk] - avg) / std
+
+    #single method that updates state of sequence
+
+
 
 options = {
      'node_color': 'black',
      'node_size': 10,
      'width': 1,
     }
+
 plt.clf()
 subgraph_nodes = [x for x in graph.nodes() if x[0] < 2]
 sg = graph.subgraph(subgraph_nodes)
