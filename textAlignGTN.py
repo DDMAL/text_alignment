@@ -455,6 +455,7 @@ if __name__ == "__main__":
     manuscript_units = [graph[x[0]][x[1]]['object'] for x in graph.edges]
 
     # normalize features over all units
+    print('normalizing features...')
     all_units = manuscript_units + prototypes.values()
 
     for fk in all_units[0].features.keys():
@@ -464,9 +465,13 @@ if __name__ == "__main__":
         for n in range(len(all_units)):
             all_units[n].features[fk] = (all_units[n].features[fk] - avg) / std
 
-    #single method that updates state of sequence
+    # rough and bad way to get very first node in the graph.
+    first_node = min([x for x in graph.nodes if x[0] == 0], key=lambda x: x[1])
 
+    # single method that updates state of sequence
+    sequences = [textUnit.unitSequence(seq=[first_node])]
 
+    
 
 options = {
      'node_color': 'black',

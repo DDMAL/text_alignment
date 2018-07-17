@@ -15,8 +15,8 @@ class textUnit(object):
 
     letters_path = './letters/'
     letter_list = (
-        'cae cre est rex nus sti tet tri'.split() +
-        'ae be bo ca ch ci co cu de do ec es et fa fe fi fo gr pe po ra sa se si sp sr ss st su sy ta te ti tu us vo'.split() +
+        'cae cre est rex sti tet tri'.split() +
+        'ae am be bo ca ch ci co cu de do ec em es et fa fe fi fo gr pe po om ra sa se si sp sr ss st su sy ta te ti tu us um vo'.split() +
         'a b c d e f g h i j l m n o p q r s t u v x y'.split()
         )
 
@@ -199,8 +199,23 @@ def get_prototypes():
     return res
 
 
-# class unitSequence(object):
-#    def __init__(self, image=None, text=None):
+class unitSequence(object):
+    def __init__(self, seq=None, char_index=None, cost=None):
+        if not cost:
+            self.cost = 0
+        else:
+            self.cost = cost
+
+        if not cost:
+            self.seq = []
+        else:
+            self.seq = seq
+
+        if not cost:
+            char_index.seq = 0
+        else:
+            char_index.seq = char_index
+
 
 
 if __name__ == "__main__":
