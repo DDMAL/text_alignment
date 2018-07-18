@@ -17,7 +17,7 @@ class textUnit(object):
     letter_list = (
         'cae cre est rex sti tet tri'.split() +
         'ae am be bo ca ch ci co cu de do ec em es et fa fe fi fo gr pe po om ra sa se si sp sr ss st su sy ta te ti tu us um vo'.split() +
-        'a b c d e f g h i j l m n o p q r s t u v x y'.split()
+        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 e_2 r_2'.split()
         )
 
     prototypes = {}
@@ -37,8 +37,7 @@ class textUnit(object):
         if text:
             self.is_synthetic = True
             self.text = text
-            self._resolve_text()
-            self._make_image()
+            self.image = textUnit.chunk_images[text]
 
         if image:
             self.is_synthetic = False
@@ -58,10 +57,6 @@ class textUnit(object):
         self.ncols = self.image.ncols
         self.offset_x = self.image.offset_x
         self.offset_y = self.image.offset_y
-        # self.left = self.image.offset_x
-        # self.up = self.image.offset_y
-        # self.right = self.image.offset_x + self.image.ncols
-        # self.down = self.image.offset_y + self.image.nrows
 
     def _index_in_seq(self, subseq, seq):
         i, n, m = -1, len(seq), len(subseq)
@@ -89,28 +84,28 @@ class textUnit(object):
 
         self.resolved_text = result
 
-    def _make_image(self):
-        # given a list of individual chunk images, stitch them together into an image of a textUnit.
-        #
-        ims = [textUnit.chunk_images[x] for x in self.resolved_text]
+    # def _make_image(self):
+    #     # given a list of individual chunk images, stitch them together into an image of a textUnit.
+    #     #
+    #     ims = [textUnit.chunk_images[x] for x in self.resolved_text]
+    #
+    #     padding = 1
+    #     height = max(x.nrows for x in ims)
+    #     width = sum(x.ncols for x in ims) + (padding * (len(ims) - 1))
+    #     result = gc.Image(gc.Point(0, 0), gc.Point(width, height))
+    #
+    #     cur_left_bound = 0
+    #
+    #     for img in ims:
+    #
+    #         for coord in itertools.product(range(img.ncols), range(img.nrows)):
+    #             trans_down = result.nrows - img.nrows
+    #             new_coord = (coord[0] + cur_left_bound, coord[1] + trans_down)
+    #             result.set(new_coord, img.get(coord))
+    #
+    #         cur_left_bound += padding + img.ncols
 
-        padding = 1
-        height = max(x.nrows for x in ims)
-        width = sum(x.ncols for x in ims) + (padding * (len(ims) - 1))
-        result = gc.Image(gc.Point(0, 0), gc.Point(width, height))
 
-        cur_left_bound = 0
-
-        for img in ims:
-
-            for coord in itertools.product(range(img.ncols), range(img.nrows)):
-                trans_down = result.nrows - img.nrows
-                new_coord = (coord[0] + cur_left_bound, coord[1] + trans_down)
-                result.set(new_coord, img.get(coord))
-
-            cur_left_bound += padding + img.ncols
-
-        self.image = result.trim_image()
 
     def _runs_line(self, ind, vertical=False, gap_ignore=gap_ignore, line_step=line_step):
 
@@ -226,6 +221,12 @@ class unitSequence(object):
             self.char_index = 0
         else:
             self.char_index = char_index
+
+    def head(self):
+        return self.seq[-1]
+
+    def equivalent(self):
+        return [self.char_index, self.seq[-1][0], self.seq[-1][1]]
 
     def __repr__(self):
         return 'cost : {0.cost}, index : {0.char_index}, nodes = {0.seq}'.format(self)

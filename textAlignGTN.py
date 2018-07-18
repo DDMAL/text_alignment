@@ -381,8 +381,9 @@ def _next_possible_prototypes(string, prototypes):
     units = prototypes.keys()
 
     for u in units:
-        comp = string[0:len(u)]
-        if u == comp:
+        split_u = u.split('_')[0]
+        comp = string[0:len(split_u)]
+        if split_u == comp:
             res[u] = prototypes[u]
 
     return res
@@ -408,11 +409,12 @@ def _get_branches_of_sequence(current_seq, graph):
         # the image that will be chosen is the one with lowest cost
         for c in candidates.keys():
             candidate_scores[c] = textUnit.compare_units(candidates[c], this_edge_unit)
-        chosen_candidate_key = min(candidate_scores)
+        chosen_candidate_key = min(candidate_scores, key=candidate_scores.get)
 
         new_seq = list(current_seq.seq) + [suc]
         new_cost = current_seq.cost + candidate_scores[chosen_candidate_key]
         new_index = current_seq.char_index + len(chosen_candidate_key)
+        new_string = current_seq.predicted_string + ' ' + chosen_candidate_key
 
         branches.append(textUnit.unitSequence(new_seq, new_index, new_cost))
 
@@ -488,7 +490,6 @@ if __name__ == "__main__":
     # normalize features over all units
     print('normalizing features...')
     all_units = manuscript_units + prototypes.values()
-
     for fk in all_units[0].features.keys():
         avg = np.mean([x.features[fk] for x in all_units])
         std = np.std([x.features[fk] for x in all_units])
@@ -502,14 +503,25 @@ if __name__ == "__main__":
     # single method that updates state of sequence
     sequences = [textUnit.unitSequence(seq=[first_node])]
 
-    current_seq = sequences[-1]
+    max_num_sequences = 50
 
-    gen = _get_branches_of_sequence(current_seq, graph)
+    for i in range(20):
 
-    next_gen = []
-    for s in gen:
-        next_gen += _get_branches_of_sequence(s, graph)
+        next_sequences = []
+        for s in sequences:
+            next_sequences += _get_branches_of_sequence(s, graph)
 
+        next_sequences.sort(key=lambda x: x.equivalent())
+        filtered_sequences = []
+        for k, group in iter.groupby(next_sequences, lambda x: x.equivalent()):
+            filtered_sequences.append(min(group, key=lambda x: x.cost))
+
+        # filter by cost: keep only the n sequences of lowest cost
+        filtered_sequences.sort(key=lambda x: x.cost)
+        max_seq = min(max_num_sequences, len(filtered_sequences))
+
+        sequences = list(filtered_sequences[:max_seq - 1])
+        print(len(sequences))
 
 options = {
      'node_color': 'black',
