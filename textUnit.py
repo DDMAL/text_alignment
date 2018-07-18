@@ -16,8 +16,8 @@ class textUnit(object):
     letters_path = './letters/'
     letter_list = (
         'cae cre est rex sti tet tri'.split() +
-        'ae am be bo ca ch ci co cu de do ec em es et fa fe fi fo gr pe po om ra sa se si sp sr ss st su sy ta te ti tu us um vo'.split() +
-        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 e_2 r_2'.split()
+        'ae am be bo ca ch ci co cu de do ec em es et fa fe fi fo gr pe po om ra sa se si sp sr ss st su sy ta te ti tu us um vo xs'.split() +
+        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2'.split()
         )
 
     prototypes = {}
@@ -37,7 +37,7 @@ class textUnit(object):
         if text:
             self.is_synthetic = True
             self.text = text
-            self.image = textUnit.chunk_images[text]
+            self.image = textUnit.chunk_images[text].trim_image()
 
         if image:
             self.is_synthetic = False
@@ -104,8 +104,6 @@ class textUnit(object):
     #             result.set(new_coord, img.get(coord))
     #
     #         cur_left_bound += padding + img.ncols
-
-
 
     def _runs_line(self, ind, vertical=False, gap_ignore=gap_ignore, line_step=line_step):
 
@@ -206,7 +204,7 @@ def compare_units(a, b):
 
 
 class unitSequence(object):
-    def __init__(self, seq=None, char_index=None, cost=None):
+    def __init__(self, seq=None, char_index=None, cost=None, predicted_string=None):
         if not cost:
             self.cost = 0
         else:
@@ -221,6 +219,11 @@ class unitSequence(object):
             self.char_index = 0
         else:
             self.char_index = char_index
+
+        if not predicted_string:
+            self.predicted_string = []
+        else:
+            self.predicted_string = predicted_string
 
     def head(self):
         return self.seq[-1]

@@ -11,12 +11,12 @@ from os.path import isfile, join
 import numpy as np
 reload(textUnit)
 
-filename = 'CF-019_3.png'
+filename = 'CF-012_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.90      # y-axis projection peaks must be at least this prominent
+prominence_tolerance = 0.75      # y-axis projection peaks must be at least this prominent
 
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
 horizontal_gap_tolerance = 30
@@ -398,6 +398,10 @@ def _get_branches_of_sequence(current_seq, graph):
     candidates = _next_possible_prototypes(transcript_string[current_seq.char_index:], prototypes)
     branches = []
 
+    # if candidates is empty, that means this sequence is at the end of the transcript string.
+    if not candidates:
+        return [current_seq]
+
     # successors to the node at the head of the current sequence
     for suc in graph.successors(current_head):
 
@@ -413,10 +417,10 @@ def _get_branches_of_sequence(current_seq, graph):
 
         new_seq = list(current_seq.seq) + [suc]
         new_cost = current_seq.cost + candidate_scores[chosen_candidate_key]
-        new_index = current_seq.char_index + len(chosen_candidate_key)
-        new_string = current_seq.predicted_string + ' ' + chosen_candidate_key
+        new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
+        new_string = current_seq.predicted_string + [[chosen_candidate_key]]
 
-        branches.append(textUnit.unitSequence(new_seq, new_index, new_cost))
+        branches.append(textUnit.unitSequence(new_seq, new_index, new_cost, new_string))
 
     return branches
 
@@ -424,25 +428,27 @@ def _get_branches_of_sequence(current_seq, graph):
 def imsv(img, fname=''):
     if type(img) == list:
         union_images(img).save_image("testimg " + fname + ".png")
-    elif type(img) == syllable.Syllable:
+    elif type(img) == textUnit.textUnit:
         img.image.save_image("testimg " + fname + ".png")
         print(img.text)
     else:
         img.save_image("testimg " + fname + ".png")
 
 
-def draw_syl_boxes_imsv(img, syl):
-    new_img = union_images([img.image_copy(), syl.image])
-    new_img.draw_hollow_rect(syl.ul, syl.lr, 1, 9)
-    for ps in syl.predicted_syllable:
-        new_img.draw_hollow_rect(ps.ul, ps.lr, 1, 9)
-    imsv(new_img)
+def seq_boxes_imsv(img, sequence, graph):
+    img_copy = img.image_copy()
+
+    nodes = sequence.seq
+    for i in range(len(nodes) - 1):
+        unit = graph[nodes[i]][nodes[i+1]]['object']
+        img_copy.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
+    imsv(img_copy)
 
 
-def two_boxes(img, tran_syls, pred_syls, index):
-    new_img = union_images([img.image_copy(), tran_syls[index].image])
-    new_img.draw_hollow_rect(tran_syls[index].ul, tran_syls[index].lr, 1, 6)
-    new_img.draw_hollow_rect(pred_syls[index][0].ul, pred_syls[index][0].lr, 1, 6)
+def draw_seq_boxes_imsv(img, prototypes, graph, seq, index):
+    new_img = union_images([img.image_copy(), prototypes[seq.predicted_string[index][0]].image])
+    unit = graph[seq.seq[index]][seq.seq[index+1]]['object']
+    new_img.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
     imsv(new_img)
 
 
@@ -470,18 +476,17 @@ if __name__ == "__main__":
     # filenames = os.listdir('./png')
     # filenames = ['CF-011_3']
     # for fn in filenames:
-    fn = 'CF-011_3'
 
-    print('processing ' + fn + '...')
+    print('processing ' + filename + '...')
 
-    image = gc.load_image('./png/' + fn + '.png')
+    image = gc.load_image('./png/' + filename + '.png')
     processed_image = _identify_text_lines_and_bunch(image)
     image = processed_image['image']
     graph = processed_image['graph']
     peak_locs = processed_image['peaks']
     cc_lines = processed_image['cc_lines']
 
-    transcript_string = _parse_transcript('./png/' + fn + '.txt')
+    transcript_string = _parse_transcript('./png/' + filename + '.txt')
 
     prototypes = textUnit.get_prototypes()
 
@@ -503,9 +508,9 @@ if __name__ == "__main__":
     # single method that updates state of sequence
     sequences = [textUnit.unitSequence(seq=[first_node])]
 
-    max_num_sequences = 50
+    max_num_sequences = 100
 
-    for i in range(20):
+    for i in range(200):
 
         next_sequences = []
         for s in sequences:
@@ -521,6 +526,7 @@ if __name__ == "__main__":
         max_seq = min(max_num_sequences, len(filtered_sequences))
 
         sequences = list(filtered_sequences[:max_seq - 1])
+        print(sequences[0].predicted_string)
         print(len(sequences))
 
 options = {
