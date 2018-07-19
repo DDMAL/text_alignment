@@ -11,7 +11,7 @@ from os.path import isfile, join
 import numpy as np
 reload(textUnit)
 
-filename = 'CF-012_3'
+filename = 'CF-011_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
@@ -450,6 +450,7 @@ def draw_seq_boxes_imsv(img, prototypes, graph, seq, index):
     unit = graph[seq.seq[index]][seq.seq[index+1]]['object']
     new_img.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
     imsv(new_img)
+    # draw_seq_boxes_imsv(image,prototypes,graph,sequences[0],0)
 
 
 def plot(inp):
@@ -510,22 +511,35 @@ if __name__ == "__main__":
 
     max_num_sequences = 100
 
+    # loop for evolving sequences
     for i in range(200):
 
-        next_sequences = []
-        for s in sequences:
-            next_sequences += _get_branches_of_sequence(s, graph)
+        # in each iteration, only evolve those with the smallest char index
+        min_char_index = min(x.char_index for x in sequences)
+        branch_sequences = [x for x in sequences if x.char_index == min_char_index]
+        keep_sequences = [x for x in sequences if not x.char_index == min_char_index]
 
-        next_sequences.sort(key=lambda x: x.equivalent())
+        # get possible branches from all sequences with min char index
+        modified_sequences = []
+        for j in branch_sequences:
+            modified_sequences += _get_branches_of_sequence(j, graph)
+
+        # add modified branches back to the list of unmodified sequences
+        sequences = keep_sequences + modified_sequences
+
+        # main opimization: if two or more sequences have reached the same cut on the manuscript
+        # and have the same char_index then only the one with lowest cost needs to be kept, since
+        # the others could not possibly be better alignments
+        sequences.sort(key=lambda x: x.equivalent())
         filtered_sequences = []
-        for k, group in iter.groupby(next_sequences, lambda x: x.equivalent()):
+        for k, group in iter.groupby(sequences, lambda x: x.equivalent()):
             filtered_sequences.append(min(group, key=lambda x: x.cost))
 
         # filter by cost: keep only the n sequences of lowest cost
         filtered_sequences.sort(key=lambda x: x.cost)
         max_seq = min(max_num_sequences, len(filtered_sequences))
-
         sequences = list(filtered_sequences[:max_seq - 1])
+
         print(sequences[0].predicted_string)
         print(len(sequences))
 
