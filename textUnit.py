@@ -219,7 +219,8 @@ class unitSequence(object):
         return [self.char_index, self.seq[-1][0], self.seq[-1][1]]
 
     def __repr__(self):
-        return 'cost : {0.cost}, index : {0.char_index}, sequence = {0.seq}'.format(self)
+        return 'cost: {0.cost}, index: {0.char_index}, len: {1}, ' \
+            'base:{2}'.format(self, len(self.used_edges), self.seq[0])
 
 if __name__ == "__main__":
     gc.init_gamera()

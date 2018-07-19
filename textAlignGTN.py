@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
 import networkx as nx
 import itertools as iter
+import copy
 import os
 import re
 import textUnit
@@ -11,7 +12,7 @@ from os.path import isfile, join
 import numpy as np
 reload(textUnit)
 
-filename = 'CF-011_3'
+filename = 'CF-012_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
@@ -364,6 +365,7 @@ def _identify_text_lines_and_bunch(input_image):
 
 def _parse_transcript(filename):
     file = open(filename, 'r')
+    lines = [x for x in lines if not x[0] == '#']
     lines = ''.join(file.readlines())
     file.close()
 
@@ -400,7 +402,11 @@ def _get_branches_of_sequence(current_seq, graph):
 
     # if candidates is empty, that means this sequence is at the end of the transcript string.
     if not candidates:
-        return [current_seq]
+        return True, False
+
+    # if there are no successors but there ARE still candidates available, then this sequence is at # the end of the manuscript(s) input but it has not yet completed its alignment. throw it out!
+    if not list(graph.successors(current_head)):
+        return False, False
 
     # successors to the node at the head of the current sequence
     for suc in graph.successors(current_head):
@@ -415,9 +421,12 @@ def _get_branches_of_sequence(current_seq, graph):
             candidate_scores[c] = textUnit.compare_units(candidates[c], this_edge_unit)
         chosen_candidate_key = min(candidate_scores, key=candidate_scores.get)
 
+        # just making an entirely new object by hand instead of copying; much faster
         new_seq = list(current_seq.seq) + [suc]
         new_used_edges = current_seq.used_edges + [(current_seq.head(), suc)]
-        new_cost = current_seq.cost + candidate_scores[chosen_candidate_key]
+        # combine averages
+        new_cost = (current_seq.cost +
+            (candidate_scores[chosen_candidate_key] - current_seq.cost) / len(new_used_edges))
         new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
         new_string = current_seq.predicted_string + [[chosen_candidate_key]]
 
@@ -429,7 +438,7 @@ def _get_branches_of_sequence(current_seq, graph):
             predicted_string=new_string
             ))
 
-    return branches
+    return branches, True
 
 
 def imsv(img, fname=''):
@@ -513,26 +522,45 @@ if __name__ == "__main__":
     # rough and bad way to get very first node in the graph.
     first_node = min([x for x in graph.nodes if x[0] == 0], key=lambda x: x[1])
 
-    # single method that updates state of sequence
-    sequences = [textUnit.unitSequence(seq=[first_node])]
+    sort_nodes = sorted(graph.nodes)
+    sequences = [textUnit.unitSequence(seq=[sort_nodes[x]]) for x in range(0, len(sort_nodes), 3)]
 
-    max_num_sequences = 100
+    # single method that updates state of sequence
+    # sequences = [textUnit.unitSequence(seq=[first_node])]
+
+    max_num_sequences = 500
+    completed_sequences = []
 
     # loop for evolving sequences
-    for i in range(200):
+    for i in range(500):
+
+        debug_str = ''
 
         # in each iteration, only evolve those with the smallest char index
         min_char_index = min(x.char_index for x in sequences)
         branch_sequences = [x for x in sequences if x.char_index == min_char_index]
         keep_sequences = [x for x in sequences if not x.char_index == min_char_index]
 
+        debug_str += 'modifying {} seqs, '.format(len(branch_sequences))
+
         # get possible branches from all sequences with min char index
         modified_sequences = []
         for j in branch_sequences:
-            modified_sequences += _get_branches_of_sequence(j, graph)
+            mod, status = _get_branches_of_sequence(j, graph)
+            if status:
+                modified_sequences += mod
+                continue
+            if mod:
+                max_num_sequences -= 1
+                completed_sequences.append(j)
+            else:
+                print('sequence failed')
 
         # add modified branches back to the list of unmodified sequences
         sequences = keep_sequences + modified_sequences
+
+        if not sequences:
+            break
 
         # main opimization: if two or more sequences have reached the same cut on the manuscript
         # and have the same char_index then only the one with lowest cost needs to be kept, since
@@ -542,13 +570,16 @@ if __name__ == "__main__":
         for k, group in iter.groupby(sequences, lambda x: x.equivalent()):
             filtered_sequences.append(min(group, key=lambda x: x.cost))
 
+        debug_str += 'filtered {} seqs, '.format(len(sequences) - len(filtered_sequences))
+
         # filter by cost: keep only the n sequences of lowest cost
         filtered_sequences.sort(key=lambda x: x.cost)
         max_seq = min(max_num_sequences, len(filtered_sequences))
         sequences = list(filtered_sequences[:max_seq - 1])
 
-        print(sequences[0].predicted_string)
-        print(len(sequences))
+        # print(sequences[0].predicted_string)
+        debug_str += '{} remain. '.format(len(sequences))
+        print(debug_str)
 
 options = {
      'node_color': 'black',
