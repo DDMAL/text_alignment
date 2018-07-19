@@ -416,11 +416,18 @@ def _get_branches_of_sequence(current_seq, graph):
         chosen_candidate_key = min(candidate_scores, key=candidate_scores.get)
 
         new_seq = list(current_seq.seq) + [suc]
+        new_used_edges = current_seq.used_edges + [(current_seq.head(), suc)]
         new_cost = current_seq.cost + candidate_scores[chosen_candidate_key]
         new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
         new_string = current_seq.predicted_string + [[chosen_candidate_key]]
 
-        branches.append(textUnit.unitSequence(new_seq, new_index, new_cost, new_string))
+        branches.append(textUnit.unitSequence(
+            seq=new_seq,
+            used_edges=new_used_edges,
+            char_index=new_index,
+            cost=new_cost,
+            predicted_string=new_string
+            ))
 
     return branches
 

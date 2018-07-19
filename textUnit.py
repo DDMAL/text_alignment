@@ -10,7 +10,6 @@ from gamera.plugins.image_utilities import union_images
 class textUnit(object):
 
     gap_ignore = 10
-
     line_step = 4
 
     letters_path = './letters/'
@@ -204,26 +203,14 @@ def compare_units(a, b):
 
 
 class unitSequence(object):
-    def __init__(self, seq=None, char_index=None, cost=None, predicted_string=None):
-        if not cost:
-            self.cost = 0
-        else:
-            self.cost = cost
-
-        if not seq:
-            self.seq = []
-        else:
-            self.seq = seq
-
-        if not cost:
-            self.char_index = 0
-        else:
-            self.char_index = char_index
-
-        if not predicted_string:
-            self.predicted_string = []
-        else:
-            self.predicted_string = predicted_string
+    def __init__(self, seq=None, skip_edges=None, used_edges=None,
+            char_index=None, cost=None, predicted_string=None):
+        self.cost = cost if cost else 0
+        self.seq = seq if seq else []
+        self.skip_edges = skip_edges if skip_edges else []
+        self.used_edges = used_edges if used_edges else []
+        self.char_index = char_index if char_index else 0
+        self.predicted_string = predicted_string if predicted_string else []
 
     def head(self):
         return self.seq[-1]
@@ -232,7 +219,7 @@ class unitSequence(object):
         return [self.char_index, self.seq[-1][0], self.seq[-1][1]]
 
     def __repr__(self):
-        return 'cost : {0.cost}, index : {0.char_index}, nodes = {0.seq}'.format(self)
+        return 'cost : {0.cost}, index : {0.char_index}, sequence = {0.seq}'.format(self)
 
 if __name__ == "__main__":
     gc.init_gamera()
