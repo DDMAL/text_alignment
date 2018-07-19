@@ -25,6 +25,7 @@ horizontal_gap_tolerance = 30
 char_filter_size = 5
 letter_horizontal_tolerance = 7
 max_num_ccs = 7
+max_num_sequences = 300
 
 
 def _bases_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
@@ -365,8 +366,8 @@ def _identify_text_lines_and_bunch(input_image):
 
 def _parse_transcript(filename):
     file = open(filename, 'r')
-    lines = [x for x in lines if not x[0] == '#']
-    lines = ''.join(file.readlines())
+    lines = file.readlines()
+    lines = ''.join([x for x in lines if not x[0] == '#'])
     file.close()
 
     lines = lines.lower()
@@ -466,7 +467,7 @@ def draw_seq_boxes_imsv(img, prototypes, graph, seq, index):
     unit = graph[seq.seq[index]][seq.seq[index+1]]['object']
     new_img.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
     imsv(new_img)
-    # draw_seq_boxes_imsv(image,prototypes,graph,sequences[0],0)
+    # draw_seq_boxes_imsv(image,prototypes,graph,completed_sequences[0],0)
 
 
 def plot(inp):
@@ -528,11 +529,11 @@ if __name__ == "__main__":
     # single method that updates state of sequence
     # sequences = [textUnit.unitSequence(seq=[first_node])]
 
-    max_num_sequences = 500
+
     completed_sequences = []
 
     # loop for evolving sequences
-    for i in range(500):
+    for i in range(len(sort_nodes)):
 
         debug_str = ''
 
