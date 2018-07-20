@@ -10,9 +10,10 @@ import re
 import textUnit
 from os.path import isfile, join
 import numpy as np
+import PIL as pil  # python imaging library, for testing only
 reload(textUnit)
 
-filename = 'CF-012_3'
+filename = 'CF-011_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
@@ -409,8 +410,7 @@ def get_branches_of_sequence(current_seq, graph):
         new_seq = list(current_seq.seq) + [suc]
         new_used_edges = current_seq.used_edges + [(current_seq.head(), suc)]
         # combine averages
-        new_cost = (current_seq.cost +
-            (candidate_scores[chosen_candidate_key] - current_seq.cost) / len(new_used_edges))
+        new_cost = current_seq.cost + [candidate_scores[chosen_candidate_key]]
         new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
         new_string = current_seq.predicted_string + [[chosen_candidate_key]]
 
@@ -418,11 +418,28 @@ def get_branches_of_sequence(current_seq, graph):
             seq=new_seq,
             used_edges=new_used_edges,
             char_index=new_index,
-            cost=new_cost,
+            cost_arr=new_cost,
             predicted_string=new_string
             ))
 
     return branches, True
+
+
+def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+    edges = list(seq.used_edges)
+
+    for i in range(len(edges)):
+        unit = graph[edges[i][0]][edges[i][1]]['object']
+        pos = (unit.ul.x, unit.ul.y - size)
+        text = seq.predicted_string[i][0].split('_')[0]
+        draw.text(pos, text, fill='rgb(0, 0, 0)', font=font)
+        draw.rectangle((unit.ul.x, unit.ul.y, unit.lr.x, unit.lr.y), outline='rgb(0, 0, 0)')
+
+    image.save(fname)
 
 
 if __name__ == "__main__":
@@ -477,7 +494,7 @@ if __name__ == "__main__":
         branch_sequences = [x for x in sequences if x.char_index == min_char_index]
         keep_sequences = [x for x in sequences if not x.char_index == min_char_index]
 
-        debug_str += 'modifying {} seqs, '.format(len(branch_sequences))
+        debug_str += 'branching {} seqs, '.format(len(branch_sequences))
 
         # get possible branches from all sequences with min char index
         modified_sequences = []
@@ -489,8 +506,6 @@ if __name__ == "__main__":
             if mod:
                 max_num_sequences -= 1
                 completed_sequences.append(j)
-            else:
-                print('sequence failed')
 
         # add modified branches back to the list of unmodified sequences
         sequences = keep_sequences + modified_sequences
@@ -504,21 +519,23 @@ if __name__ == "__main__":
         sequences.sort(key=lambda x: x.equivalent())
         filtered_sequences = []
         for k, group in iter.groupby(sequences, lambda x: x.equivalent()):
-            filtered_sequences.append(min(group, key=lambda x: x.cost))
+            filtered_sequences.append(min(group, key=lambda x: x.cost()))
 
         debug_str += 'filtered {} seqs, '.format(len(sequences) - len(filtered_sequences))
 
         # filter by cost: keep only the n sequences of lowest cost
-        filtered_sequences.sort(key=lambda x: x.cost)
+        filtered_sequences.sort(key=lambda x: x.cost())
         max_seq = min(max_num_sequences, len(filtered_sequences))
         sequences = list(filtered_sequences[:max_seq - 1])
 
         # print(sequences[0].predicted_string)
-        debug_str += '{} remain. '.format(len(sequences))
+        debug_str += '{} remain, '.format(len(sequences))
+        debug_str += 'lowest cost {}.'.format(round(sequences[0].cost(), 3))
         print(debug_str)
 
     for i, s in enumerate(completed_sequences):
         print(i, s)
+    test_text(image, completed_sequences[0], graph)
 
 options = {
      'node_color': 'black',

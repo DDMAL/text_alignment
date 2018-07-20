@@ -5,6 +5,7 @@ testimg*
 testplot*
 png/
 letters/
+*.ttf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

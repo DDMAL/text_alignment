@@ -1,7 +1,7 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
 import itertools
-from PIL import Image, ImageDraw, ImageFont  # for testing only!
+
 import numpy as np
 
 from gamera.plugins.image_utilities import union_images
@@ -204,8 +204,8 @@ def compare_units(a, b):
 
 class unitSequence(object):
     def __init__(self, seq=None, skip_edges=None, used_edges=None,
-            char_index=None, cost=None, predicted_string=None):
-        self.cost = cost if cost else 0
+            char_index=None, cost_arr=None, predicted_string=None):
+        self.cost_arr = cost_arr if cost_arr else []
         self.seq = seq if seq else []
         self.skip_edges = skip_edges if skip_edges else []
         self.used_edges = used_edges if used_edges else []
@@ -215,12 +215,16 @@ class unitSequence(object):
     def head(self):
         return self.seq[-1]
 
+    def cost():
+        return np.mean(cost)
+
     def equivalent(self):
         return [self.char_index, self.seq[-1][0], self.seq[-1][1]]
 
     def __repr__(self):
         return 'cost: {0.cost}, index: {0.char_index}, len: {1}, ' \
             'base:{2}'.format(self, len(self.used_edges), self.seq[0])
+
 
 if __name__ == "__main__":
     gc.init_gamera()
