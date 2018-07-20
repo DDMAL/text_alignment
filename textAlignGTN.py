@@ -28,7 +28,72 @@ max_num_ccs = 7
 max_num_sequences = 300
 
 
-def _bases_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
+def bounding_box(cc_list):
+    '''
+    given a list of connected components, finds the smallest
+    bounding box that encloses all of them.
+    '''
+
+    upper = [x.offset_y for x in cc_list]
+    lower = [x.offset_y + x.nrows for x in cc_list]
+    left = [x.offset_x for x in cc_list]
+    right = [x.offset_x + x.ncols for x in cc_list]
+
+    ul = gc.Point(min(left), min(upper))
+    lr = gc.Point(max(right), max(lower))
+
+    return ul, lr
+
+
+def imsv(img, fname=''):
+    if type(img) == list:
+        union_images(img).save_image("testimg " + fname + ".png")
+    elif type(img) == textUnit.textUnit:
+        img.image.save_image("testimg " + fname + ".png")
+        print(img.text)
+    else:
+        img.save_image("testimg " + fname + ".png")
+
+
+def seq_boxes_imsv(img, sequence, graph):
+    img_copy = img.image_copy()
+
+    nodes = sequence.seq
+    for i in range(len(nodes) - 1):
+        unit = graph[nodes[i]][nodes[i+1]]['object']
+        img_copy.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
+    imsv(img_copy)
+
+
+def draw_seq_boxes_imsv(img, prototypes, graph, seq, index):
+    new_img = union_images([img.image_copy(), prototypes[seq.predicted_string[index][0]].image])
+    unit = graph[seq.seq[index]][seq.seq[index+1]]['object']
+    new_img.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
+    print(seq.predicted_string[index])
+    imsv(new_img)
+    # draw_seq_boxes_imsv(image,prototypes,graph,completed_sequences[0],0)
+
+
+def plot(inp):
+    plt.clf()
+    asdf = plt.plot(inp, c='black', linewidth=0.5)
+    plt.savefig("testplot.png", dpi=800)
+
+
+def draw_lines(image, line_locs, horizontal=True):
+    new = image.image_copy()
+    for l in line_locs:
+        if horizontal:
+            start = gc.FloatPoint(0, l)
+            end = gc.FloatPoint(image.ncols, l)
+        else:
+            start = gc.FloatPoint(l, 0)
+            end = gc.FloatPoint(l, image.nrows)
+        new.draw_line(start, end, 1, 5)
+    return new
+
+
+def bases_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
     """
     A helper function that takes in the vertical width of a horizontal strip
     and the vertical measurements of a connected component, and returns a value
@@ -50,89 +115,7 @@ def _bases_coincide(hline_position, comp_offset, comp_nrows, collision=collision
     return (not both_above and not both_below)
 
 
-def _group_ccs(cc_list, gap_tolerance=horizontal_gap_tolerance):
-    '''
-    a helper function that takes in a list of ccs on the same line and groups them together based
-    on contiguity of their bounding boxes along the horizontal axis.
-    '''
-
-    cc_copy = cc_list[:]
-    result = [[cc_copy.pop(0)]]
-
-    while(cc_copy):
-
-        current_group = result[-1]
-        left_bound = min([x.offset_x for x in current_group]) - gap_tolerance
-        right_bound = max([x.offset_x + x.ncols for x in current_group]) + gap_tolerance
-
-        overlaps = [x for x in cc_copy if
-                    (left_bound <= x.offset_x <= right_bound) or
-                    (left_bound <= x.offset_x + x.ncols <= right_bound)
-                    ]
-
-        if not overlaps:
-            result.append([cc_copy.pop(0)])
-            continue
-
-        for x in overlaps:
-            result[-1].append(x)
-            cc_copy.remove(x)
-
-    gap_sizes = []
-    for n in range(len(result)-1):
-        left = result[n][-1].offset_x + result[n][-1].ncols
-        right = result[n+1][0].offset_x
-        gap_sizes.append(right - left)
-
-    return result, gap_sizes
-
-
-def _exhaustively_bunch(cc_list, gap_tolerance=horizontal_gap_tolerance, max_num_ccs=max_num_ccs):
-    '''
-    given a list of connected components on a single line (assumed to be in order from left
-    to right), groups them into all possible bunches of up to max_num_ccs consecutive
-    components. bunches with gaps larger than horizontal_gap_tolerance are not added.
-    '''
-
-    cc_copy = cc_list[:]
-    result = []
-
-    for n in range(1, max_num_ccs):
-        next_group = [cc_copy[x:x + n] for x in range(len(cc_copy) - n + 1)]
-
-        # for each member of this group, decide if it should be added; make sure the connected
-        # components are separated by less than horizontal_gap_tolerance
-
-        for g in next_group:
-            cc_end = [x.offset_x + x.ncols for x in g[:-1]]
-            cc_begin = [x.offset_x for x in g[1:]]
-            gaps = [cc_begin[x] - cc_end[x] for x in range(n-1)]
-
-            if not any([x >= horizontal_gap_tolerance for x in gaps]):
-                result.append(g)
-
-    # result += [[x] for x in cc_copy]
-    return result
-
-
-def _bounding_box(cc_list):
-    '''
-    given a list of connected components, finds the smallest
-    bounding box that encloses all of them.
-    '''
-
-    upper = [x.offset_y for x in cc_list]
-    lower = [x.offset_y + x.nrows for x in cc_list]
-    left = [x.offset_x for x in cc_list]
-    right = [x.offset_x + x.ncols for x in cc_list]
-
-    ul = gc.Point(min(left), min(upper))
-    lr = gc.Point(max(right), max(lower))
-
-    return ul, lr
-
-
-def _calculate_peak_prominence(data, index):
+def calculate_peak_prominence(data, index):
     '''
     returns the log of the prominence of the peak at a given index in a given dataset. peak
     prominence gives high values to relatively isolated peaks and low values to peaks that are
@@ -186,8 +169,8 @@ def _calculate_peak_prominence(data, index):
     return prominence
 
 
-def _find_peak_locations(data, tol=prominence_tolerance):
-    prominences = [(i, _calculate_peak_prominence(data, i))
+def find_peak_locations(data, tol=prominence_tolerance):
+    prominences = [(i, calculate_peak_prominence(data, i))
                    for i in range(len(data))]
     prom_max = max([x[1] for x in prominences])
     prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
@@ -195,7 +178,7 @@ def _find_peak_locations(data, tol=prominence_tolerance):
     return peak_locs
 
 
-def _moving_avg_filter(data, filter_size):
+def moving_avg_filter(data, filter_size):
     '''
     returns a list containing the data in @data filtered through a moving-average filter of size
     @filter_size to either side; that is, filter_size = 1 gives a size of 3, filter size = 2 gives
@@ -208,7 +191,7 @@ def _moving_avg_filter(data, filter_size):
     return smoothed
 
 
-def _identify_text_lines_and_bunch(input_image):
+def identify_text_lines_and_bunch(input_image):
     # find likely rotation angle and correct
     print('correcting rotation...')
     image_grey = input_image.to_greyscale()
@@ -222,10 +205,10 @@ def _identify_text_lines_and_bunch(input_image):
     # compute y-axis projection of input image and filter with sliding window average
     print('finding projection peaks...')
     project = image_bin.projection_rows()
-    smoothed_projection = _moving_avg_filter(project, filter_size)
+    smoothed_projection = moving_avg_filter(project, filter_size)
 
     # calculate normalized log prominence of all peaks in projection
-    peak_locations = _find_peak_locations(smoothed_projection)
+    peak_locations = find_peak_locations(smoothed_projection)
 
     # perform connected component analysis and remove sufficiently small ccs and ccs that are too
     # tall; assume these to be ornamental letters
@@ -239,7 +222,7 @@ def _identify_text_lines_and_bunch(input_image):
     print('intersecting connected components with text lines...')
     cc_lines = []
     for line_loc in peak_locations:
-        res = [x for x in components if _bases_coincide(line_loc, x.offset_y, x.nrows)]
+        res = [x for x in components if bases_coincide(line_loc, x.offset_y, x.nrows)]
         res = sorted(res, key=lambda x: x.offset_x)
         cc_lines.append(res)
 
@@ -275,14 +258,14 @@ def _identify_text_lines_and_bunch(input_image):
     print('oversegmenting and building initial graph...')
     for line_num, cl in enumerate(cc_lines):
 
-        ul, lr = _bounding_box(cl)
+        ul, lr = bounding_box(cl)
         line_image = image_bin.subimage(ul, lr)
         line_proj = line_image.projection_cols()
         line_proj = [max(line_proj) - x for x in line_proj]  # reverse it
 
-        smooth_line_proj = _moving_avg_filter(line_proj, char_filter_size)
+        smooth_line_proj = moving_avg_filter(line_proj, char_filter_size)
 
-        peak_locs = _find_peak_locations(smooth_line_proj)
+        peak_locs = find_peak_locations(smooth_line_proj)
         peak_locs = [x for i, x in enumerate(peak_locs)
                      if (i == 0)
                      or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
@@ -364,7 +347,7 @@ def _identify_text_lines_and_bunch(input_image):
             }
 
 
-def _parse_transcript(filename):
+def parse_transcript(filename):
     file = open(filename, 'r')
     lines = file.readlines()
     lines = ''.join([x for x in lines if not x[0] == '#'])
@@ -378,7 +361,7 @@ def _parse_transcript(filename):
     return lines
 
 
-def _next_possible_prototypes(string, prototypes):
+def next_possible_prototypes(string, prototypes):
     res = {}
 
     units = prototypes.keys()
@@ -392,13 +375,13 @@ def _next_possible_prototypes(string, prototypes):
     return res
 
 
-def _get_branches_of_sequence(current_seq, graph):
+def get_branches_of_sequence(current_seq, graph):
     '''
     given a sequence and the graph of slice positions, returns all the branches that could be
     made from the head of that sequence.
     '''
     current_head = current_seq.seq[-1]
-    candidates = _next_possible_prototypes(transcript_string[current_seq.char_index:], prototypes)
+    candidates = next_possible_prototypes(transcript_string[current_seq.char_index:], prototypes)
     branches = []
 
     # if candidates is empty, that means this sequence is at the end of the transcript string.
@@ -442,53 +425,6 @@ def _get_branches_of_sequence(current_seq, graph):
     return branches, True
 
 
-def imsv(img, fname=''):
-    if type(img) == list:
-        union_images(img).save_image("testimg " + fname + ".png")
-    elif type(img) == textUnit.textUnit:
-        img.image.save_image("testimg " + fname + ".png")
-        print(img.text)
-    else:
-        img.save_image("testimg " + fname + ".png")
-
-
-def seq_boxes_imsv(img, sequence, graph):
-    img_copy = img.image_copy()
-
-    nodes = sequence.seq
-    for i in range(len(nodes) - 1):
-        unit = graph[nodes[i]][nodes[i+1]]['object']
-        img_copy.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
-    imsv(img_copy)
-
-
-def draw_seq_boxes_imsv(img, prototypes, graph, seq, index):
-    new_img = union_images([img.image_copy(), prototypes[seq.predicted_string[index][0]].image])
-    unit = graph[seq.seq[index]][seq.seq[index+1]]['object']
-    new_img.draw_hollow_rect(unit.ul, unit.lr, 1, 9)
-    imsv(new_img)
-    # draw_seq_boxes_imsv(image,prototypes,graph,completed_sequences[0],0)
-
-
-def plot(inp):
-    plt.clf()
-    asdf = plt.plot(inp, c='black', linewidth=0.5)
-    plt.savefig("testplot.png", dpi=800)
-
-
-def draw_lines(image, line_locs, horizontal=True):
-    new = image.image_copy()
-    for l in line_locs:
-        if horizontal:
-            start = gc.FloatPoint(0, l)
-            end = gc.FloatPoint(image.ncols, l)
-        else:
-            start = gc.FloatPoint(l, 0)
-            end = gc.FloatPoint(l, image.nrows)
-        new.draw_line(start, end, 1, 5)
-    return new
-
-
 if __name__ == "__main__":
 
     # filenames = os.listdir('./png')
@@ -498,13 +434,13 @@ if __name__ == "__main__":
     print('processing ' + filename + '...')
 
     image = gc.load_image('./png/' + filename + '.png')
-    processed_image = _identify_text_lines_and_bunch(image)
+    processed_image = identify_text_lines_and_bunch(image)
     image = processed_image['image']
     graph = processed_image['graph']
     peak_locs = processed_image['peaks']
     cc_lines = processed_image['cc_lines']
 
-    transcript_string = _parse_transcript('./png/' + filename + '.txt')
+    transcript_string = parse_transcript('./png/' + filename + '.txt')
 
     prototypes = textUnit.get_prototypes()
 
@@ -529,7 +465,6 @@ if __name__ == "__main__":
     # single method that updates state of sequence
     # sequences = [textUnit.unitSequence(seq=[first_node])]
 
-
     completed_sequences = []
 
     # loop for evolving sequences
@@ -547,7 +482,7 @@ if __name__ == "__main__":
         # get possible branches from all sequences with min char index
         modified_sequences = []
         for j in branch_sequences:
-            mod, status = _get_branches_of_sequence(j, graph)
+            mod, status = get_branches_of_sequence(j, graph)
             if status:
                 modified_sequences += mod
                 continue
@@ -581,6 +516,9 @@ if __name__ == "__main__":
         # print(sequences[0].predicted_string)
         debug_str += '{} remain. '.format(len(sequences))
         print(debug_str)
+
+    for i, s in enumerate(completed_sequences):
+        print(i, s)
 
 options = {
      'node_color': 'black',

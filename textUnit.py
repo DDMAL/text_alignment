@@ -1,7 +1,7 @@
 import gamera.core as gc
 import matplotlib.pyplot as plt
 import itertools
-# from fastdtw import fastdtw
+from PIL import Image, ImageDraw, ImageFont  # for testing only!
 import numpy as np
 
 from gamera.plugins.image_utilities import union_images
