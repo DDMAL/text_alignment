@@ -215,15 +215,22 @@ class unitSequence(object):
     def head(self):
         return self.seq[-1]
 
-    def cost():
-        return np.mean(cost)
+    def cost(self, moving_avg=False):
+        if not moving_avg:
+            return np.mean(self.cost_arr)
+
+        res = []
+        for i in range(len(self.cost_arr)):
+            res.append(np.mean(self.cost_arr[0:i]))
+
+        return res
 
     def equivalent(self):
         return [self.char_index, self.seq[-1][0], self.seq[-1][1]]
 
     def __repr__(self):
-        return 'cost: {0.cost}, index: {0.char_index}, len: {1}, ' \
-            'base:{2}'.format(self, len(self.used_edges), self.seq[0])
+        return 'cost: {3}, index: {0.char_index}, len: {1}, ' \
+            'base:{2}'.format(self, len(self.used_edges), self.seq[0], self.cost())
 
 
 if __name__ == "__main__":

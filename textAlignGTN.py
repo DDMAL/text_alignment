@@ -11,9 +11,10 @@ import textUnit
 from os.path import isfile, join
 import numpy as np
 import PIL as pil  # python imaging library, for testing only
+from PIL import Image, ImageDraw, ImageFont
 reload(textUnit)
 
-filename = 'CF-011_3'
+filename = 'CF-012_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
@@ -192,7 +193,7 @@ def moving_avg_filter(data, filter_size):
     return smoothed
 
 
-def identify_text_lines_and_bunch(input_image):
+def identify_text_lines(input_image):
     # find likely rotation angle and correct
     print('correcting rotation...')
     image_grey = input_image.to_greyscale()
@@ -228,7 +229,7 @@ def identify_text_lines_and_bunch(input_image):
         cc_lines.append(res)
 
     # if a single connected component appears in more than one cc_line, give priority to the line
-    # that is closer to the cemter of the component's bounding box
+    # that is closer to the center of the component's bounding box
     for n in range(len(cc_lines)-1):
         intersect = set(cc_lines[n]) & set(cc_lines[n+1])
 
@@ -244,6 +245,11 @@ def identify_text_lines_and_bunch(input_image):
 
     # remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
+
+    return image_bin, cc_lines, peak_locations
+
+
+def segment_lines_build_graph(image_bin, cc_lines):
 
     syllable_list = []
     graph = nx.DiGraph()
@@ -340,12 +346,7 @@ def identify_text_lines_and_bunch(input_image):
         unit = textUnit.textUnit(image=edge_image)
         graph.edges[nodes[0], nodes[1]]['object'] = unit
 
-    return {'image': image_bin,
-            'graph': graph,
-            'peaks': peak_locations,
-            'cc_lines': cc_lines,
-            'projection': smoothed_projection
-            }
+    return graph
 
 
 def parse_transcript(filename):
@@ -410,7 +411,7 @@ def get_branches_of_sequence(current_seq, graph):
         new_seq = list(current_seq.seq) + [suc]
         new_used_edges = current_seq.used_edges + [(current_seq.head(), suc)]
         # combine averages
-        new_cost = current_seq.cost + [candidate_scores[chosen_candidate_key]]
+        new_cost = current_seq.cost_arr + [candidate_scores[chosen_candidate_key]]
         new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
         new_string = current_seq.predicted_string + [[chosen_candidate_key]]
 
@@ -450,20 +451,15 @@ if __name__ == "__main__":
 
     print('processing ' + filename + '...')
 
-    image = gc.load_image('./png/' + filename + '.png')
-    processed_image = identify_text_lines_and_bunch(image)
-    image = processed_image['image']
-    graph = processed_image['graph']
-    peak_locs = processed_image['peaks']
-    cc_lines = processed_image['cc_lines']
-
+    raw_image = gc.load_image('./png/' + filename + '.png')
+    image, cc_lines, peak_locs = identify_text_lines(raw_image)
+    graph = segment_lines_build_graph(image, cc_lines)
     transcript_string = parse_transcript('./png/' + filename + '.txt')
 
+    # normalize features over all units
     prototypes = textUnit.get_prototypes()
-
     manuscript_units = [graph[x[0]][x[1]]['object'] for x in graph.edges]
 
-    # normalize features over all units
     print('normalizing features...')
     all_units = manuscript_units + prototypes.values()
     for fk in all_units[0].features.keys():
@@ -548,3 +544,6 @@ subgraph_nodes = [x for x in graph.nodes() if x[0] < 2]
 sg = graph.subgraph(subgraph_nodes)
 nx.draw_kamada_kawai(sg, **options)
 plt.savefig('testplot.png', dpi=800)
+
+imsv(raw_image.saturation())
+x = raw_image.saturation().to_greyscale().threshold(128).invert()
