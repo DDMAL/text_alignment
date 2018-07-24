@@ -27,7 +27,7 @@ horizontal_gap_tolerance = 30
 char_filter_size = 5
 letter_horizontal_tolerance = 7
 max_num_ccs = 7
-max_num_sequences = 300
+max_num_sequences = 800
 
 
 def bounding_box(cc_list):
@@ -198,6 +198,11 @@ def identify_text_lines(input_image):
     print('correcting rotation...')
     image_grey = input_image.to_greyscale()
     image_bin = image_grey.to_onebit()
+
+    image_sats = raw_image.saturation().to_greyscale().threshold(128)
+    image_sats = raw_image.to_onebit().subtract_images(image_sats)
+    image_bin = raw_image.to_onebit().subtract_images(image_sats)
+
     angle, tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle=angle)
     image_bin.filter_short_runs(3, 'black')
@@ -346,6 +351,9 @@ def segment_lines_build_graph(image_bin, cc_lines):
         unit = textUnit.textUnit(image=edge_image)
         graph.edges[nodes[0], nodes[1]]['object'] = unit
 
+    for node in graph.nodes:
+        graph.nodes[node]['leaderboard'] = {}
+
     return graph
 
 
@@ -411,19 +419,35 @@ def get_branches_of_sequence(current_seq, graph):
         new_seq = list(current_seq.seq) + [suc]
         new_used_edges = current_seq.used_edges + [(current_seq.head(), suc)]
         # combine averages
-        new_cost = current_seq.cost_arr + [candidate_scores[chosen_candidate_key]]
+        new_cost_arr = current_seq.cost_arr + [candidate_scores[chosen_candidate_key]]
         new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
         new_string = current_seq.predicted_string + [[chosen_candidate_key]]
+
+        lead = graph.nodes[suc]['leaderboard']
+        mean_cost = np.mean(new_cost_arr)
+        if new_index not in lead.keys():
+            lead[new_index] = mean_cost
+        elif lead[new_index] >= mean_cost:
+            lead[new_index] = mean_cost
+        else:
+            continue
 
         branches.append(textUnit.unitSequence(
             seq=new_seq,
             used_edges=new_used_edges,
             char_index=new_index,
-            cost_arr=new_cost,
+            cost_arr=new_cost_arr,
             predicted_string=new_string
             ))
 
+    # test to see if leaderboard for heads of branches excludes branches from competition and
+    # update leaderboards if not
+
     return branches, True
+
+
+def update_leaderboards(branches, graph):
+    pass
 
 
 def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
@@ -473,7 +497,7 @@ if __name__ == "__main__":
     first_node = min([x for x in graph.nodes if x[0] == 0], key=lambda x: x[1])
 
     sort_nodes = sorted(graph.nodes)
-    sequences = [textUnit.unitSequence(seq=[sort_nodes[x]]) for x in range(0, len(sort_nodes), 3)]
+    sequences = [textUnit.unitSequence(seq=[sort_nodes[x]]) for x in range(0, len(sort_nodes), 1)]
 
     # single method that updates state of sequence
     # sequences = [textUnit.unitSequence(seq=[first_node])]
@@ -495,13 +519,15 @@ if __name__ == "__main__":
         # get possible branches from all sequences with min char index
         modified_sequences = []
         for j in branch_sequences:
-            mod, status = get_branches_of_sequence(j, graph)
-            if status:
-                modified_sequences += mod
+            branches, status = get_branches_of_sequence(j, graph)
+            if not (status or branches):
                 continue
-            if mod:
+            if branches and (not status):
                 max_num_sequences -= 1
                 completed_sequences.append(j)
+                continue
+            modified_sequences += branches
+            update_leaderboards(branches, graph)
 
         # add modified branches back to the list of unmodified sequences
         sequences = keep_sequences + modified_sequences
@@ -545,5 +571,8 @@ sg = graph.subgraph(subgraph_nodes)
 nx.draw_kamada_kawai(sg, **options)
 plt.savefig('testplot.png', dpi=800)
 
-imsv(raw_image.saturation())
-x = raw_image.saturation().to_greyscale().threshold(128).invert()
+imsv(raw_image)
+image_sats = raw_image.saturation().to_greyscale().threshold(128)
+asdf = raw_image.to_onebit().subtract_images(image_sats)
+asdf2 = raw_image.to_onebit().subtract_images(asdf)
+imsv(asdf2)
