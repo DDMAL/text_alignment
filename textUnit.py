@@ -15,8 +15,9 @@ class textUnit(object):
     letters_path = './letters/'
     letter_list = (
         'cae cre est rex sti tet tri'.split() +
-        'ae am be bo ca ch ci co cu de do ec em es et fa fe fi fo gr pe po om ra sa se si sp sr ss st su sy ta te ti tu us um vo xs'.split() +
-        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2 e_2 d_2 v_2'.split()
+        'ae am an be bo ca ch ci co cu de do ec em en es et fa fe fi fo gr pe po om on ra sa se si sp sr ss st su sy ta te ti tu us um un vo xs'.split() +
+        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2 e_2 d_2 v_2 m_2 b_2'.split() +
+        '_wildcard_unit'
         )
 
     prototypes = {}
@@ -28,10 +29,12 @@ class textUnit(object):
 
     chunk_images = _dict_helper(letters_path, letter_list)
 
-    def __init__(self, image=None, text=None):
+    def __init__(self, image=None, text=None, is_wildcard=None):
 
         if not (bool(text) ^ bool(image)):
             raise ValueError('Supply an image or text, but not both')
+
+        self.is_wildcard = is_wildcard
 
         if text:
             self.is_synthetic = True
@@ -66,43 +69,6 @@ class textUnit(object):
                     return i
         except ValueError:
             return -1
-
-    def _resolve_text(self):
-        result = list(self.text)
-
-        for chunk in self.letter_list:
-            l = list(chunk)
-            index = self._index_in_seq(l, result)
-
-            while index != -1:
-                result = result[:index] + result[index + len(chunk):]
-                result.insert(index, "@" + chunk)
-                index = self._index_in_seq(l, result)
-
-        result[:] = [r.replace('@', '') for r in result]
-
-        self.resolved_text = result
-
-    # def _make_image(self):
-    #     # given a list of individual chunk images, stitch them together into an image of a textUnit.
-    #     #
-    #     ims = [textUnit.chunk_images[x] for x in self.resolved_text]
-    #
-    #     padding = 1
-    #     height = max(x.nrows for x in ims)
-    #     width = sum(x.ncols for x in ims) + (padding * (len(ims) - 1))
-    #     result = gc.Image(gc.Point(0, 0), gc.Point(width, height))
-    #
-    #     cur_left_bound = 0
-    #
-    #     for img in ims:
-    #
-    #         for coord in itertools.product(range(img.ncols), range(img.nrows)):
-    #             trans_down = result.nrows - img.nrows
-    #             new_coord = (coord[0] + cur_left_bound, coord[1] + trans_down)
-    #             result.set(new_coord, img.get(coord))
-    #
-    #         cur_left_bound += padding + img.ncols
 
     def _runs_line(self, ind, vertical=False, gap_ignore=gap_ignore, line_step=line_step):
 
@@ -188,11 +154,16 @@ def get_prototypes():
     for l in textUnit.letter_list:
         res[l] = textUnit(text=l)
 
+    res['*'] = textUnit(is_wildcard=True, text='_wildcard_unit')
+
     return res
 
 
 def compare_units(a, b):
     feature_keys = a.features.keys()
+
+    if a.is_wildcard or b.is_wildcard:
+        return 0
 
     sum = 0
 

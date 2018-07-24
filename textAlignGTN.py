@@ -14,7 +14,7 @@ import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 reload(textUnit)
 
-filename = 'CF-011_3'
+filename = 'CF-012_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
@@ -371,6 +371,7 @@ def segment_lines_build_graph(image_bin, cc_lines):
 def parse_transcript(filename):
     file = open(filename, 'r')
     lines = file.readlines()
+    lines = ['*' + x[1:] for x in lines]
     lines = ''.join([x for x in lines if not x[0] == '#'])
     file.close()
 
@@ -541,9 +542,10 @@ if __name__ == "__main__":
         if not sequences:
             break
 
-        # main opimization: if two or more sequences have reached the same cut on the manuscript
+        # an opimization: if two or more sequences have reached the same cut on the manuscript
         # and have the same char_index then only the one with lowest cost needs to be kept, since
-        # the others could not possibly be better alignments
+        # the others could not possibly be better alignments. this works in addition to the
+        # leaderboard system
         sequences.sort(key=lambda x: x.equivalent())
         filtered_sequences = []
         for k, group in iter.groupby(sequences, lambda x: x.equivalent()):
@@ -577,11 +579,11 @@ options = {
 # nx.draw_kamada_kawai(sg, **options)
 # plt.savefig('testplot.png', dpi=800)
 #
-# image_sats = raw_image.saturation().to_greyscale().threshold(128)
-# asdf = raw_image.to_onebit().subtract_images(image_sats)
-# asdf2 = raw_image.to_onebit().subtract_images(asdf)
-# imsv(asdf2)
+image_sats = raw_image.red().to_greyscale().threshold(160)
+asdf = raw_image.to_onebit().subtract_images(image_sats)
+asdf2 = raw_image.to_onebit().subtract_images(asdf)
+imsv(asdf2)
 
-# n = 2
-# asdf = [x + all_line_images[n].offset_x for x in all_peak_locs[n]]
-# imsv(draw_lines(image, asdf, False))
+n = 2
+asdf = [x + all_line_images[n].offset_x for x in all_peak_locs[n]]
+imsv(draw_lines(image, asdf, False))
