@@ -16,7 +16,7 @@ class textUnit(object):
     letter_list = (
         'cae cre est rex sti tet tri'.split() +
         'ae am be bo ca ch ci co cu de do ec em es et fa fe fi fo gr pe po om ra sa se si sp sr ss st su sy ta te ti tu us um vo xs'.split() +
-        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2'.split()
+        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2 e_2 d_2 v_2'.split()
         )
 
     prototypes = {}
@@ -127,7 +127,7 @@ class textUnit(object):
 
         res['volume'] = self.image.volume()[0]
         res['black_area'] = self.image.black_area()[0]
-        res['area'] = self.image.area()[0]
+        res['aspect_ratio'] = self.image.aspect_ratio()[0]
         res['diagonal_projection'] = self.image.diagonal_projection()[0]
 
         skeleton_feats = self.image.skeleton_features()

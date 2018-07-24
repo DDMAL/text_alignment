@@ -14,7 +14,7 @@ import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 reload(textUnit)
 
-filename = 'CF-012_3'
+filename = 'CF-011_3'
 despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
@@ -267,20 +267,31 @@ def segment_lines_build_graph(image_bin, cc_lines):
     # horizontal projection for what's inside that bounding box, filter it, find the peaks using
     # log-prominence, draw new bounding boxes around individual letters / parts of letters using
     # the peaks locations found, and create a directed straight-line graph
+    all_peak_locs = []
+    all_line_images = []
+    projections = []
     print('oversegmenting and building initial graph...')
     for line_num, cl in enumerate(cc_lines):
 
         ul, lr = bounding_box(cl)
         line_image = image_bin.subimage(ul, lr)
+
+        all_line_images.append(line_image)
         line_proj = line_image.projection_cols()
         line_proj = [max(line_proj) - x for x in line_proj]  # reverse it
 
         smooth_line_proj = moving_avg_filter(line_proj, char_filter_size)
 
+        projections.append(smooth_line_proj)
+
         peak_locs = find_peak_locations(smooth_line_proj)
+        peak_locs.insert(0, 0)
+        peak_locs.append(len(smooth_line_proj) - 1)
         peak_locs = [x for i, x in enumerate(peak_locs)
                      if (i == 0)
                      or (x - peak_locs[i-1] > letter_horizontal_tolerance)]
+
+        all_peak_locs.append(peak_locs)
 
         for n in range(len(peak_locs) - 1):
 
@@ -354,7 +365,7 @@ def segment_lines_build_graph(image_bin, cc_lines):
     for node in graph.nodes:
         graph.nodes[node]['leaderboard'] = {}
 
-    return graph
+    return graph, all_peak_locs, all_line_images, projections
 
 
 def parse_transcript(filename):
@@ -414,13 +425,13 @@ def get_branches_of_sequence(current_seq, graph):
         for c in candidates.keys():
             candidate_scores[c] = textUnit.compare_units(candidates[c], this_edge_unit)
         chosen_candidate_key = min(candidate_scores, key=candidate_scores.get)
-
+        chosen_len = len(chosen_candidate_key.split('_')[0])
         # just making an entirely new object by hand instead of copying; much faster
         new_seq = list(current_seq.seq) + [suc]
         new_used_edges = current_seq.used_edges + [(current_seq.head(), suc)]
         # combine averages
-        new_cost_arr = current_seq.cost_arr + [candidate_scores[chosen_candidate_key]]
-        new_index = current_seq.char_index + len(chosen_candidate_key.split('_')[0])
+        new_cost_arr = current_seq.cost_arr + [candidate_scores[chosen_candidate_key]] * chosen_len
+        new_index = current_seq.char_index + chosen_len
         new_string = current_seq.predicted_string + [[chosen_candidate_key]]
 
         lead = graph.nodes[suc]['leaderboard']
@@ -444,10 +455,6 @@ def get_branches_of_sequence(current_seq, graph):
     # update leaderboards if not
 
     return branches, True
-
-
-def update_leaderboards(branches, graph):
-    pass
 
 
 def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
@@ -476,8 +483,8 @@ if __name__ == "__main__":
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '.png')
-    image, cc_lines, peak_locs = identify_text_lines(raw_image)
-    graph = segment_lines_build_graph(image, cc_lines)
+    image, cc_lines, lines_peak_locs = identify_text_lines(raw_image)
+    graph, all_peak_locs, all_line_images, projections = segment_lines_build_graph(image, cc_lines)
     transcript_string = parse_transcript('./png/' + filename + '.txt')
 
     # normalize features over all units
@@ -527,7 +534,6 @@ if __name__ == "__main__":
                 completed_sequences.append(j)
                 continue
             modified_sequences += branches
-            update_leaderboards(branches, graph)
 
         # add modified branches back to the list of unmodified sequences
         sequences = keep_sequences + modified_sequences
@@ -565,14 +571,17 @@ options = {
      'width': 1,
     }
 
-plt.clf()
-subgraph_nodes = [x for x in graph.nodes() if x[0] < 2]
-sg = graph.subgraph(subgraph_nodes)
-nx.draw_kamada_kawai(sg, **options)
-plt.savefig('testplot.png', dpi=800)
+# plt.clf()
+# subgraph_nodes = [x for x in graph.nodes() if x[0] < 2]
+# sg = graph.subgraph(subgraph_nodes)
+# nx.draw_kamada_kawai(sg, **options)
+# plt.savefig('testplot.png', dpi=800)
+#
+# image_sats = raw_image.saturation().to_greyscale().threshold(128)
+# asdf = raw_image.to_onebit().subtract_images(image_sats)
+# asdf2 = raw_image.to_onebit().subtract_images(asdf)
+# imsv(asdf2)
 
-imsv(raw_image)
-image_sats = raw_image.saturation().to_greyscale().threshold(128)
-asdf = raw_image.to_onebit().subtract_images(image_sats)
-asdf2 = raw_image.to_onebit().subtract_images(asdf)
-imsv(asdf2)
+# n = 2
+# asdf = [x + all_line_images[n].offset_x for x in all_peak_locs[n]]
+# imsv(draw_lines(image, asdf, False))
