@@ -16,8 +16,7 @@ class textUnit(object):
     letter_list = (
         'cae cre est rex sti tet tri'.split() +
         'ae am an be bo ca ch ci co cu de do ec em en es et fa fe fi fo gr pe po om on ra sa se si sp sr ss st su sy ta te ti tu us um un vo xs'.split() +
-        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2 e_2 d_2 v_2 m_2 b_2'.split() +
-        '_wildcard_unit'
+        'a b c d e f g h i j l m n o p q r s t u v x y ae_2 r_2 e_2 d_2 v_2 m_2 b_2 ._1'.split()
         )
 
     prototypes = {}
@@ -154,7 +153,7 @@ def get_prototypes():
     for l in textUnit.letter_list:
         res[l] = textUnit(text=l)
 
-    res['*'] = textUnit(is_wildcard=True, text='_wildcard_unit')
+    res['*'] = textUnit(is_wildcard=True, text='a')
 
     return res
 

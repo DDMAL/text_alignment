@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
 import networkx as nx
 import itertools as iter
-import copy
 import os
 import re
 import textUnit
@@ -15,19 +14,24 @@ from PIL import Image, ImageDraw, ImageFont
 reload(textUnit)
 
 filename = 'CF-012_3'
-despeckle_amt = 100             # an int in [1,100]: ignore ccs with area smaller than this
+
+# PARAMETERS FOR PREPROCESSING
+saturation_thresh = 0.5
+sat_area_thresh = 150
+despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
 
+
+# PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.75      # y-axis projection peaks must be at least this prominent
-
+prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-horizontal_gap_tolerance = 30
-
 char_filter_size = 5
-letter_horizontal_tolerance = 7
-max_num_ccs = 7
-max_num_sequences = 800
+letter_horizontal_tolerance = 10
+
+# PARAMETERS FOR GRAPH SEARCH
+max_num_ccs = 5
+max_num_sequences = 400
 
 
 def bounding_box(cc_list):
@@ -193,21 +197,30 @@ def moving_avg_filter(data, filter_size):
     return smoothed
 
 
-def identify_text_lines(input_image):
+def preprocess_image(input_image, sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
+            despeckle_amt=despeckle_amt, filter_runs=1):
+
+    image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
+    image_bin = input_image.to_onebit().subtract_images(image_sats)
+    ccs = image_bin.cc_analysis()
+    for c in ccs:
+        area = c.nrows
+        if sat_area_thresh < area:
+            c.fill_white()
+    image_bin = input_image.to_onebit().subtract_images(image_bin)
+
     # find likely rotation angle and correct
-    print('correcting rotation...')
-    image_grey = input_image.to_greyscale()
-    image_bin = image_grey.to_onebit()
-
-    image_sats = raw_image.saturation().to_greyscale().threshold(128)
-    image_sats = raw_image.to_onebit().subtract_images(image_sats)
-    image_bin = raw_image.to_onebit().subtract_images(image_sats)
-
     angle, tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle=angle)
-    image_bin.filter_short_runs(3, 'black')
-    image_bin.filter_narrow_runs(3, 'black')
+    for i in range(filter_runs):
+        image_bin.filter_short_runs(3, 'black')
+        image_bin.filter_narrow_runs(3, 'black')
     image_bin.despeckle(despeckle_amt)
+
+    return image_bin
+
+
+def identify_text_lines(image_bin):
 
     # compute y-axis projection of input image and filter with sliding window average
     print('finding projection peaks...')
@@ -251,7 +264,7 @@ def identify_text_lines(input_image):
     # remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-    return image_bin, cc_lines, peak_locations
+    return cc_lines, peak_locations
 
 
 def segment_lines_build_graph(image_bin, cc_lines):
@@ -484,7 +497,8 @@ if __name__ == "__main__":
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '.png')
-    image, cc_lines, lines_peak_locs = identify_text_lines(raw_image)
+    image = preprocess_image(raw_image)
+    cc_lines, lines_peak_locs = identify_text_lines(image)
     graph, all_peak_locs, all_line_images, projections = segment_lines_build_graph(image, cc_lines)
     transcript_string = parse_transcript('./png/' + filename + '.txt')
 
@@ -579,11 +593,14 @@ options = {
 # nx.draw_kamada_kawai(sg, **options)
 # plt.savefig('testplot.png', dpi=800)
 #
-image_sats = raw_image.red().to_greyscale().threshold(160)
-asdf = raw_image.to_onebit().subtract_images(image_sats)
-asdf2 = raw_image.to_onebit().subtract_images(asdf)
-imsv(asdf2)
 
-n = 2
-asdf = [x + all_line_images[n].offset_x for x in all_peak_locs[n]]
-imsv(draw_lines(image, asdf, False))
+
+
+# sdf = [x.nrows for x in ccs]
+# plt.clf()
+# plt.hist(sdf, log=True, bins=30)
+# plt.savefig('testplot.png')
+
+# n = 2
+# asdf = [x + all_line_images[n].offset_x for x in all_peak_locs[n]]
+# imsv(draw_lines(image, asdf, False))
