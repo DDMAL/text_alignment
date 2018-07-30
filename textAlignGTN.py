@@ -176,11 +176,25 @@ def calculate_peak_prominence(data, index):
 
 
 def find_peak_locations(data, tol=prominence_tolerance):
-    prominences = [(i, calculate_peak_prominence(data, i))
-                   for i in range(len(data))]
+    prominences = [(i, calculate_peak_prominence(data, i)) for i in range(len(data))]
+
+    # normalize to interval [0,1]
     prom_max = max([x[1] for x in prominences])
     prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
-    peak_locs = [x[0] for x in prominences if x[1] > tol]
+
+    # take only the tallest peaks above given tolerance
+    peak_locs = [x for x in prominences if x[1] > tol]
+
+    # if a peak has a flat top, then both 'corners' of that peak will have high prominence; this
+    # is rather unavoidable. just check for adjacent peaks with exactly the same prominence and
+    # remove the lower one
+    to_remove = [peak_locs[i] for i in range(len(peak_locs) - 2)
+                if peak_locs[i][1] == peak_locs[i+1][1]]
+    for r in to_remove:
+        peak_locs.remove(r)
+
+    peak_locs[:] = [x[0] for x in peak_locs]
+
     return peak_locs
 
 
@@ -235,7 +249,12 @@ def identify_text_lines(image_bin):
     print('connected component analysis...')
     components = image_bin.cc_analysis()
     med_comp_height = np.median([c.nrows for c in components])
-    components[:] = [c for c in components if c.black_area()[0] > noise_area_thresh and c.nrows < (med_comp_height * 2)]
+
+    for c in components:
+        if c.black_area()[0] < noise_area_thresh:
+            c.fill_white()
+
+    components[:] = [c for c in components if c.nrows < (med_comp_height * 2)]
 
     # using the peak locations found earlier, find all connected components that are intersected by
     # a horizontal strip at either edge of each line. these are the lines of text in the manuscript
@@ -248,18 +267,22 @@ def identify_text_lines(image_bin):
 
     # if a single connected component appears in more than one cc_line, give priority to the line
     # that is closer to the center of the component's bounding box
+    # TODO: SOMETHING IS GOING VERY WRONG HERE????? LOOK AT FOLIO 12
     for n in range(len(cc_lines)-1):
         intersect = set(cc_lines[n]) & set(cc_lines[n+1])
-
+        print(len(intersect))
         for i in intersect:
+
             box_center = i.offset_y + (i.nrows / 2)
             distance_up = abs(peak_locations[n] - box_center)
             distance_down = abs(peak_locations[n+1] - box_center)
 
             if distance_up < distance_down:
                 cc_lines[n].remove(i)
+                print('removing up')
             else:
                 cc_lines[n+1].remove(i)
+                print('removing down')
 
     # remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
@@ -268,6 +291,8 @@ def identify_text_lines(image_bin):
 
 
 def segment_lines_build_graph(image_bin, cc_lines):
+
+    print('oversegmenting and building initial graph...')
 
     syllable_list = []
     graph = nx.DiGraph()
@@ -283,11 +308,19 @@ def segment_lines_build_graph(image_bin, cc_lines):
     all_peak_locs = []
     all_line_images = []
     projections = []
-    print('oversegmenting and building initial graph...')
+
     for line_num, cl in enumerate(cc_lines):
 
         ul, lr = bounding_box(cl)
         line_image = image_bin.subimage(ul, lr)
+        # this is ugly and it'd be much better to have another layer of classified ornamental
+        # letters to deal with, but it's what's gotta happen for now.
+        # ul.x = 0
+        # lr.x = image_bin.ncols - 1
+        # temp_image = image_bin.subimage(ul, lr)
+        # new_ul = gc.Point(int(min(temp_image.contour_left())), ul.y)
+        # new_lr = gc.Point(int(lr.x - min(temp_image.contour_right())), lr.y)
+        # line_image = image_bin.subimage(new_ul, new_lr)
 
         all_line_images.append(line_image)
         line_proj = line_image.projection_cols()
@@ -579,7 +612,8 @@ if __name__ == "__main__":
 
     for i, s in enumerate(completed_sequences):
         print(i, s)
-    test_text(image, completed_sequences[0], graph)
+    with_lines = draw_lines(image, lines_peak_locs)
+    test_text(with_lines, completed_sequences[0], graph)
 
 options = {
      'node_color': 'black',
@@ -593,8 +627,6 @@ options = {
 # nx.draw_kamada_kawai(sg, **options)
 # plt.savefig('testplot.png', dpi=800)
 #
-
-
 
 # sdf = [x.nrows for x in ccs]
 # plt.clf()
