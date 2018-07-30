@@ -270,19 +270,21 @@ def identify_text_lines(image_bin):
     # TODO: SOMETHING IS GOING VERY WRONG HERE????? LOOK AT FOLIO 12
     for n in range(len(cc_lines)-1):
         intersect = set(cc_lines[n]) & set(cc_lines[n+1])
-        print(len(intersect))
+
+        # print(len(intersect))
+
         for i in intersect:
 
             box_center = i.offset_y + (i.nrows / 2)
             distance_up = abs(peak_locations[n] - box_center)
             distance_down = abs(peak_locations[n+1] - box_center)
 
-            if distance_up < distance_down:
+            if distance_up > distance_down:
                 cc_lines[n].remove(i)
-                print('removing up')
+                # print('removing up')
             else:
                 cc_lines[n+1].remove(i)
-                print('removing down')
+                # print('removing down')
 
     # remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]

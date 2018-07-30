@@ -90,22 +90,29 @@ class textUnit(object):
     def _extract_features(self):
         res = {}
 
-        res['volume'] = self.image.volume()[0]
+        # res['volume'] = self.image.volume()[0]
         res['black_area'] = self.image.black_area()[0]
         res['aspect_ratio'] = self.image.aspect_ratio()[0]
-        res['diagonal_projection'] = self.image.diagonal_projection()[0]
+        # res['diagonal_projection'] = self.image.diagonal_projection()[0]
 
-        skeleton_feats = self.image.skeleton_features()
-        for i, f in enumerate(skeleton_feats):
-            res['skeleton_' + str(i)] = f
+        # skeleton_feats = self.image.skeleton_features()
+        # for i, f in enumerate(skeleton_feats):
+        #     res['skeleton_' + str(i)] = f
 
-        volume_feats = self.image.volume64regions()
+        # before taking region volume features, pad image out to a square
+        temp_img = self.image.image_copy()
+        if temp_img.nrows > temp_img.ncols:
+            temp_img.pad_image(0, temp_img.nrows - temp_img.ncols, 0, 0)
+        elif temp_img.nrows < temp_img.ncols:
+            temp_img.pad_image(0, 0, temp_img.ncols - temp_img.nrows, 0)
+
+        volume_feats = temp_img.volume64regions()
         for i, f in enumerate(volume_feats):
             res['volume_region_' + str(i)] = f
 
-        moments_feats = self.image.moments()
-        for i, f in enumerate(moments_feats):
-            res['moments_' + str(i)] = f
+        # moments_feats = self.image.moments()
+        # for i, f in enumerate(moments_feats):
+        #     res['moments_' + str(i)] = f
 
         self.features = res
 
