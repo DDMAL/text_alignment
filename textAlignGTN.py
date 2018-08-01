@@ -13,7 +13,7 @@ import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 reload(textUnit)
 
-filename = 'CF-012_3'
+filename = 'CF-011_3'
 
 # PARAMETERS FOR PREPROCESSING
 saturation_thresh = 0.5
@@ -268,10 +268,13 @@ def identify_text_lines(image_bin):
     # if a single connected component appears in more than one cc_line, give priority to the line
     # that is closer to the center of the component's bounding box
     # TODO: SOMETHING IS GOING VERY WRONG HERE????? LOOK AT FOLIO 12
-    for n in range(len(cc_lines)-1):
+    for n in range(len(cc_lines) - 1):
         intersect = set(cc_lines[n]) & set(cc_lines[n+1])
 
-        # print(len(intersect))
+        # print((len(intersect), len(cc_lines[n]), len(cc_lines[n+1])))
+        if (len(cc_lines[n]) == len(cc_lines[n+1])):
+            cc_lines[n + 1] = []
+            continue
 
         for i in intersect:
 
@@ -290,6 +293,44 @@ def identify_text_lines(image_bin):
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
     return cc_lines, peak_locations
+
+
+def _group_ccs(cc_list, gap_tolerance=50):
+    '''
+    a helper function that takes in a list of ccs on the same line and groups them together based
+    on contiguity of their bounding boxes along the horizontal axis.
+    '''
+
+    cc_copy = cc_list[:]
+    result = [[cc_copy.pop(0)]]
+
+    while(cc_copy):
+
+        current_group = result[-1]
+        left_bound = min([x.offset_x for x in current_group]) - gap_tolerance
+        right_bound = max([x.offset_x + x.ncols for x in current_group]) + gap_tolerance
+
+        overlaps = [x for x in cc_copy if
+                    (left_bound <= x.offset_x <= right_bound) or
+                    (left_bound <= x.offset_x + x.ncols <= right_bound)
+                    ]
+
+        if not overlaps:
+            result.append([cc_copy.pop(0)])
+            continue
+
+        for x in overlaps:
+            result[-1].append(x)
+            cc_copy.remove(x)
+
+    gap_sizes = []
+    for n in range(len(result)-1):
+        left = result[n][-1].offset_x + result[n][-1].ncols
+        right = result[n+1][0].offset_x
+        gap_sizes.append(right - left)
+
+    return result  # , gap_sizes
+
 
 
 def segment_lines_build_graph(image_bin, cc_lines):
@@ -416,17 +457,21 @@ def segment_lines_build_graph(image_bin, cc_lines):
     return graph, all_peak_locs, all_line_images, projections
 
 
-def parse_transcript(filename):
+def parse_transcript(filename, syllables=False):
     file = open(filename, 'r')
     lines = file.readlines()
     lines = ['*' + x[1:] for x in lines]
-    lines = ''.join([x for x in lines if not x[0] == '#'])
+    lines = ' '.join([x for x in lines if not x[0] == '#'])
     file.close()
 
     lines = lines.lower()
-    lines = lines.replace('\n', '')
-    lines = lines.replace('-', '')
-    lines = lines.replace(' ', '')
+
+    if not syllables:
+        lines = lines.replace('-', '')
+        lines = lines.replace(' ', '')
+        lines = lines.replace('\n', '')
+    else:
+        lines = re.compile('[- \n]').split(lines)
 
     return lines
 
@@ -523,7 +568,19 @@ def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
     image.save(fname)
 
 
-if __name__ == "__main__":
+def align_breaks_fitness(syllable_groups, group_lengths, scale_transcript_length):
+
+    cur_pos = 0
+    cost = 0
+    for i, x in enumerate(syllable_groups):
+        new_sum = sum(scale_transcript_length[cur_pos:x])
+        cur_pos = x
+        cost += (new_sum - group_lengths[i]) ** 2
+
+    return cost
+
+
+def text_unit_method():
 
     # filenames = os.listdir('./png')
     # filenames = ['CF-011_3']
@@ -615,13 +672,41 @@ if __name__ == "__main__":
     for i, s in enumerate(completed_sequences):
         print(i, s)
     with_lines = draw_lines(image, lines_peak_locs)
-    test_text(with_lines, completed_sequences[0], graph)
+    test_text(image, completed_sequences[0], graph)
 
-options = {
-     'node_color': 'black',
-     'node_size': 10,
-     'width': 1,
-    }
+
+if __name__ == "__main__":
+    print('processing ' + filename + '...')
+
+    raw_image = gc.load_image('./png/' + filename + '.png')
+    image = preprocess_image(raw_image)
+    cc_lines, lines_peak_locs = identify_text_lines(image)
+
+    cc_groups = []
+    for x in cc_lines:
+        cc_groups += _group_ccs(x)
+
+    group_lengths = []
+    for g in cc_groups:
+        width = sum([x.ncols for x in g])
+        group_lengths.append(width)
+
+    transcript_string = parse_transcript('./png/' + filename + '.txt', syllables=True)
+    transcript_lengths = [len(x) for x in transcript_string]
+
+    avg_char_length = round(sum(group_lengths) / sum(transcript_lengths))
+    scale_transcript_lengths = [x * avg_char_length for x in transcript_lengths]
+    print(align_breaks_fitness(test_grouping, group_lengths, scale_transcript_lengths))
+
+    # brute force greedy alignment; let's see how that works first
+
+
+
+# options = {
+#      'node_color': 'black',
+#      'node_size': 10,
+#      'width': 1,
+#     }
 
 # plt.clf()
 # subgraph_nodes = [x for x in graph.nodes() if x[0] < 2]
