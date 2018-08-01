@@ -24,10 +24,12 @@ noise_area_thresh = 500        # an int in : ignore ccs with area smaller than t
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.90     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
 char_filter_size = 5
 letter_horizontal_tolerance = 10
+
+cc_group_gap_min = 15
 
 # PARAMETERS FOR GRAPH SEARCH
 max_num_ccs = 5
@@ -295,7 +297,7 @@ def identify_text_lines(image_bin):
     return cc_lines, peak_locations
 
 
-def _group_ccs(cc_list, gap_tolerance=50):
+def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
     '''
     a helper function that takes in a list of ccs on the same line and groups them together based
     on contiguity of their bounding boxes along the horizontal axis.
@@ -330,7 +332,6 @@ def _group_ccs(cc_list, gap_tolerance=50):
         gap_sizes.append(right - left)
 
     return result  # , gap_sizes
-
 
 
 def segment_lines_build_graph(image_bin, cc_lines):
@@ -675,6 +676,26 @@ def text_unit_method():
     test_text(image, completed_sequences[0], graph)
 
 
+def draw_blob_alignment(alignment_groups, transcript_string,
+                        cc_groups, gamera_image, size=70, fname='testimg.png'):
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+
+    for i, x in enumerate(cc_groups):
+        used_syllables_indices = [j for j, y in enumerate(alignment_groups) if y == i]
+        used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
+
+        position = (x[0].ul.x, x[0].ul.y - size)
+        draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
+        ul, lr = bounding_box(x)
+        draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
+
+    image.save(fname)
+    pass
+
+
 if __name__ == "__main__":
     print('processing ' + filename + '...')
 
@@ -684,7 +705,7 @@ if __name__ == "__main__":
 
     cc_groups = []
     for x in cc_lines:
-        cc_groups += _group_ccs(x)
+        cc_groups += group_ccs(x)
 
     group_lengths = []
     for g in cc_groups:
@@ -696,9 +717,36 @@ if __name__ == "__main__":
 
     avg_char_length = round(sum(group_lengths) / sum(transcript_lengths))
     scale_transcript_lengths = [x * avg_char_length for x in transcript_lengths]
-    print(align_breaks_fitness(test_grouping, group_lengths, scale_transcript_lengths))
+    # print(align_breaks_fitness(test_grouping, group_lengths, scale_transcript_lengths))
 
     # brute force greedy alignment; let's see how that works first
+    alignment_groups = []
+    blob_index = 0
+    current_dist = 0
+    for tl in scale_transcript_lengths:
+
+        if blob_index >= len(group_lengths):
+            print('ran out of blobs!')
+            break
+
+        candidate_dist = current_dist + tl
+        target = group_lengths[blob_index]
+        current_badness = abs(current_dist - target)
+        candidate_badness = abs(candidate_dist - target)
+
+        print(blob_index, tl, target)
+
+        if current_badness <= candidate_badness:
+            blob_index += 1
+            current_dist = tl
+        else:
+            current_dist += tl
+
+        alignment_groups.append(blob_index)
+
+    asdf = [(x, group_lengths[x], scale_transcript_lengths[i], transcript_string[i]) for i, x in enumerate(alignment_groups)]
+
+    draw_blob_alignment(alignment_groups, transcript_string, cc_groups, image)
 
 
 
