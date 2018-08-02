@@ -574,11 +574,11 @@ def align_breaks_fitness(syllable_groups, group_lengths, scale_transcript_length
     cur_pos = 0
     cost = 0
     for i, x in enumerate(syllable_groups):
-        new_sum = sum(scale_transcript_length[cur_pos:x])
-        cur_pos = x
+        new_sum = sum(scale_transcript_length[cur_pos:cur_pos + x])
+        cur_pos += x
         cost += (new_sum - group_lengths[i]) ** 2
 
-    return cost
+    return round(cost / len(syllable_groups))
 
 
 def text_unit_method():
@@ -683,17 +683,19 @@ def draw_blob_alignment(alignment_groups, transcript_string,
     draw = pil.ImageDraw.Draw(image)
     font = pil.ImageFont.truetype('Arial.ttf', size=size)
 
-    for i, x in enumerate(cc_groups):
-        used_syllables_indices = [j for j, y in enumerate(alignment_groups) if y == i]
+    cur_syl_index = 0
+    for i in range(len(alignment_groups)):
+        end_syl_index = cur_syl_index + alignment_groups[i]
+        used_syllables_indices = list(range(cur_syl_index, end_syl_index))
+        cur_syl_index = end_syl_index
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
 
-        position = (x[0].ul.x, x[0].ul.y - size)
+        position = (cc_groups[i][0].ul.x, cc_groups[i][0].ul.y - size)
         draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
-        ul, lr = bounding_box(x)
+        ul, lr = bounding_box(cc_groups[i])
         draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
 
     image.save(fname)
-    pass
 
 
 if __name__ == "__main__":
@@ -719,6 +721,65 @@ if __name__ == "__main__":
     scale_transcript_lengths = [x * avg_char_length for x in transcript_lengths]
     # print(align_breaks_fitness(test_grouping, group_lengths, scale_transcript_lengths))
 
+    # asdf = [(x, group_lengths[x], scale_transcript_lengths[i], transcript_string[i]) for i, x in enumerate(alignment_groups)]
+
+    # some alignments to start us off
+    sequences = [[1], [2], [3], [4]]
+    completed_sequences = []
+    max_syllables_scale = 2
+    min_syllables_scale = 0.25
+    max_blob_sequences = 2500
+
+    # iterating over blobs
+    for i, gl in enumerate(group_lengths[:-1]):
+        new_sequences = []
+        print('group length', gl)
+        # get max number of syllables that could possibly be assigned to this blob
+        max_branches = int(np.ceil(gl * max_syllables_scale / avg_char_length))
+
+        # get lower bound on number of syllables that could possibly be assigned to this blob
+        min_branches = int(np.floor(gl * min_syllables_scale / avg_char_length))
+
+        print('max/min branches', min_branches, max_branches)
+
+        branches = []
+        for seq in sequences:
+            # consider appending 1 to this sequence, then 2, and so on until it gets unreasonable
+            remaining_leeway = len(scale_transcript_lengths) - sum(seq)
+            branches += [seq + [i] for i in range(min_branches, min(max_branches, remaining_leeway))]
+
+        sums_and_seqs = [(sum(x), x) for x in branches]
+        sums_and_seqs.sort(key=lambda x: x[0])
+
+        for key, group in iter.groupby(sums_and_seqs, lambda x: x[0]):
+            group = [x[1] for x in group]
+            # print(key, group)
+            scores = [(align_breaks_fitness(x, group_lengths, scale_transcript_lengths), x)
+                    for x in group]
+            best_group_member = min(scores, key=lambda x: x[0])
+            new_sequences.append(best_group_member)
+
+        # after previous for loop new_sequences still has a cost associated with each sequence
+        # remove all but the least costly sequences
+        print('len new sequences', len(new_sequences))
+        new_sequences.sort(key=lambda x: x[0])
+
+        # remove completed sequences which have used up every single syllable
+        full = [x for x in new_sequences
+            if sum(x[1]) == len(scale_transcript_lengths)]
+        for x in full:
+            new_sequences.remove(x)
+            completed_sequences.append(x)
+        max_blob_sequences -= len(full)
+
+        sequences = [x[1] for x in new_sequences][:max_blob_sequences]
+
+        print("----")
+
+    draw_blob_alignment(sequences[0], transcript_string, cc_groups, image)
+
+
+def brute_force_blob_alignment(group_lengths, scale_transcript_lengths):
     # brute force greedy alignment; let's see how that works first
     alignment_groups = []
     blob_index = 0
@@ -744,10 +805,7 @@ if __name__ == "__main__":
 
         alignment_groups.append(blob_index)
 
-    asdf = [(x, group_lengths[x], scale_transcript_lengths[i], transcript_string[i]) for i, x in enumerate(alignment_groups)]
-
-    draw_blob_alignment(alignment_groups, transcript_string, cc_groups, image)
-
+    return alignment_groups
 
 
 # options = {
