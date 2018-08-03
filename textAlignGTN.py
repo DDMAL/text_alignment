@@ -19,7 +19,7 @@ filename = 'CF-011_3'
 saturation_thresh = 0.5
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 500        # an int in : ignore ccs with area smaller than this
+noise_area_thresh = 700        # an int in : ignore ccs with area smaller than this
 
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
@@ -30,6 +30,8 @@ char_filter_size = 5
 letter_horizontal_tolerance = 10
 
 cc_group_gap_min = 15
+min_letter_width = 35
+max_noise_width = 50
 
 # PARAMETERS FOR GRAPH SEARCH
 max_num_ccs = 5
@@ -218,11 +220,14 @@ def preprocess_image(input_image, sat_tresh=saturation_thresh, sat_area_thresh=s
 
     image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
     image_bin = input_image.to_onebit().subtract_images(image_sats)
+
+    # keep only colored ccs above a certain size
     ccs = image_bin.cc_analysis()
     for c in ccs:
         area = c.nrows
         if sat_area_thresh < area:
             c.fill_white()
+
     image_bin = input_image.to_onebit().subtract_images(image_bin)
 
     # find likely rotation angle and correct
@@ -466,13 +471,14 @@ def parse_transcript(filename, syllables=False):
     file.close()
 
     lines = lines.lower()
+    lines = lines.replace('\n', '')
 
     if not syllables:
         lines = lines.replace('-', '')
         lines = lines.replace(' ', '')
-        lines = lines.replace('\n', '')
     else:
-        lines = re.compile('[- \n]').split(lines)
+        lines = lines.replace('.', '')
+        lines = re.compile('[- ]').split(lines)
 
     return lines
 
@@ -569,12 +575,12 @@ def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
     image.save(fname)
 
 
-def align_breaks_fitness(syllable_groups, group_lengths, scale_transcript_length):
+def align_breaks_fitness(syllable_groups, group_lengths, syl_lengths):
 
     cur_pos = 0
     cost = 0
     for i, x in enumerate(syllable_groups):
-        new_sum = sum(scale_transcript_length[cur_pos:cur_pos + x])
+        new_sum = sum(syl_lengths[cur_pos:cur_pos + x])
         cur_pos += x
         cost += (new_sum - group_lengths[i]) ** 2
 
@@ -677,7 +683,7 @@ def text_unit_method():
 
 
 def draw_blob_alignment(alignment_groups, transcript_string,
-                        cc_groups, gamera_image, size=70, fname='testimg.png'):
+                        cc_groups, gamera_image, size=55, fname='testimg.png'):
     gamera_image.save_image(fname)
     image = pil.Image.open(fname)
     draw = pil.ImageDraw.Draw(image)
@@ -689,10 +695,12 @@ def draw_blob_alignment(alignment_groups, transcript_string,
         used_syllables_indices = list(range(cur_syl_index, end_syl_index))
         cur_syl_index = end_syl_index
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
+        used_syllables = str(alignment_groups[i]) + " " + used_syllables
 
-        position = (cc_groups[i][0].ul.x, cc_groups[i][0].ul.y - size)
-        draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
         ul, lr = bounding_box(cc_groups[i])
+        position = (ul.x, ul.y - size)
+        draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
+
         draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
 
     image.save(fname)
@@ -718,44 +726,59 @@ if __name__ == "__main__":
     transcript_lengths = [len(x) for x in transcript_string]
 
     avg_char_length = round(sum(group_lengths) / sum(transcript_lengths))
-    scale_transcript_lengths = [x * avg_char_length for x in transcript_lengths]
-    # print(align_breaks_fitness(test_grouping, group_lengths, scale_transcript_lengths))
-
-    # asdf = [(x, group_lengths[x], scale_transcript_lengths[i], transcript_string[i]) for i, x in enumerate(alignment_groups)]
+    avg_syl_length = round(sum(group_lengths) / len(group_lengths))
+    syl_lengths = [x * avg_char_length for x in transcript_lengths]
+    # print(align_breaks_fitness(test_grouping, group_lengths, syl_lengths))
 
     # some alignments to start us off
-    sequences = [[1], [2], [3], [4]]
+    sequences = [[]]
     completed_sequences = []
-    max_syllables_scale = 2
-    min_syllables_scale = 0.25
+    max_syllables_scale = 4
+    min_syllables_scale = 0
     max_blob_sequences = 2500
 
-    # iterating over blobs
+    # iterating over blobs: TRY SWITCHING OVER TO AVERAGE SYLLABLE LENGTH RATHER THAN LETTER LENGTH
     for i, gl in enumerate(group_lengths[:-1]):
+        print('sequences begin length', len(sequences))
+        print(sum(sequences[0]))
+
         new_sequences = []
         print('group length', gl)
+
         # get max number of syllables that could possibly be assigned to this blob
         max_branches = int(np.ceil(gl * max_syllables_scale / avg_char_length))
 
         # get lower bound on number of syllables that could possibly be assigned to this blob
         min_branches = int(np.floor(gl * min_syllables_scale / avg_char_length))
+        if gl > max_noise_width:
+            min_branches = 1
 
-        print('max/min branches', min_branches, max_branches)
+        print('min/max branches', min_branches, max_branches)
 
         branches = []
         for seq in sequences:
             # consider appending 1 to this sequence, then 2, and so on until it gets unreasonable
-            remaining_leeway = len(scale_transcript_lengths) - sum(seq)
-            branches += [seq + [i] for i in range(min_branches, min(max_branches, remaining_leeway))]
+            remaining_leeway = len(syl_lengths) - sum(seq)
 
+            if remaining_leeway <= min_branches:
+                branches += [seq + [remaining_leeway]]
+                continue
+
+            if gl <= min_letter_width:
+                branches += [seq + [0]]
+                continue
+
+            branches += [seq + [i] for i
+                    in range(min_branches, min(max_branches, remaining_leeway))]
+
+        print('num branches', len(branches))
         sums_and_seqs = [(sum(x), x) for x in branches]
         sums_and_seqs.sort(key=lambda x: x[0])
 
         for key, group in iter.groupby(sums_and_seqs, lambda x: x[0]):
             group = [x[1] for x in group]
             # print(key, group)
-            scores = [(align_breaks_fitness(x, group_lengths, scale_transcript_lengths), x)
-                    for x in group]
+            scores = [(align_breaks_fitness(x, group_lengths, syl_lengths), x) for x in group]
             best_group_member = min(scores, key=lambda x: x[0])
             new_sequences.append(best_group_member)
 
@@ -765,26 +788,38 @@ if __name__ == "__main__":
         new_sequences.sort(key=lambda x: x[0])
 
         # remove completed sequences which have used up every single syllable
-        full = [x for x in new_sequences
-            if sum(x[1]) == len(scale_transcript_lengths)]
-        for x in full:
-            new_sequences.remove(x)
-            completed_sequences.append(x)
-        max_blob_sequences -= len(full)
+        # full = [x for x in new_sequences
+        #     if sum(x[1]) == len(syl_lengths)]
+        # for x in full:
+        #     print('some branches full!')
+        #     new_sequences.remove(x)
+        #     completed_sequences.append(x)
+        # max_blob_sequences -= len(full)
 
         sequences = [x[1] for x in new_sequences][:max_blob_sequences]
 
         print("----")
 
+    # best_seq = min(completed_sequences, key=lambda x: x[0])[1]
     draw_blob_alignment(sequences[0], transcript_string, cc_groups, image)
 
+    res = []
+    pos = 0
+    for i, x in enumerate(sequences[0]):
+        end_syl_index = pos + x
+        used_syllables_indices = list(range(pos, end_syl_index))
+        pos = end_syl_index
+        used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
+        syl_length_sum = sum([syl_lengths[j] for j in used_syllables_indices])
+        res.append((group_lengths[i], syl_length_sum, used_syllables,  x))
 
-def brute_force_blob_alignment(group_lengths, scale_transcript_lengths):
+
+def brute_force_blob_alignment(group_lengths, syl_lengths):
     # brute force greedy alignment; let's see how that works first
     alignment_groups = []
     blob_index = 0
     current_dist = 0
-    for tl in scale_transcript_lengths:
+    for tl in syl_lengths:
 
         if blob_index >= len(group_lengths):
             print('ran out of blobs!')
