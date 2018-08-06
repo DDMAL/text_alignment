@@ -11,6 +11,7 @@ from os.path import isfile, join
 import numpy as np
 import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
+from collections import defaultdict
 reload(textUnit)
 
 filename = 'CF-011_3'
@@ -24,14 +25,28 @@ noise_area_thresh = 700        # an int in : ignore ccs with area smaller than t
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.90     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-char_filter_size = 5
-letter_horizontal_tolerance = 10
+remove_capitals_scale = 4
 
-cc_group_gap_min = 15
+char_filter_size = 5
+
+# CC GROUPING (BLOBS)
+letter_horizontal_tolerance = 10
+cc_group_gap_min = 14  # any gap at least this wide will be assumed to be a space between words!
 min_letter_width = 35
 max_noise_width = 50
+
+letter_width_dict = {
+    '*': 200,
+    'm': 128,
+    'l': 36,
+    'i': 36,
+    'a': 84,
+    'c': 60,
+    'e': 59,
+    'r': 60
+}
 
 # PARAMETERS FOR GRAPH SEARCH
 max_num_ccs = 5
@@ -216,7 +231,7 @@ def moving_avg_filter(data, filter_size):
 
 
 def preprocess_image(input_image, sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
-            despeckle_amt=despeckle_amt, filter_runs=1):
+            despeckle_amt=despeckle_amt, filter_runs=30):
 
     image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
     image_bin = input_image.to_onebit().subtract_images(image_sats)
@@ -229,13 +244,17 @@ def preprocess_image(input_image, sat_tresh=saturation_thresh, sat_area_thresh=s
             c.fill_white()
 
     image_bin = input_image.to_onebit().subtract_images(image_bin)
+    image_bin.invert()
+    image_bin.despeckle(despeckle_amt)
+    image_bin.invert()
+    image_bin.reset_onebit_image()
 
     # find likely rotation angle and correct
     angle, tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle=angle)
     for i in range(filter_runs):
-        image_bin.filter_short_runs(3, 'black')
-        image_bin.filter_narrow_runs(3, 'black')
+        image_bin.filter_short_runs(5, 'black')
+        image_bin.filter_narrow_runs(5, 'black')
     image_bin.despeckle(despeckle_amt)
 
     return image_bin
@@ -261,7 +280,8 @@ def identify_text_lines(image_bin):
         if c.black_area()[0] < noise_area_thresh:
             c.fill_white()
 
-    components[:] = [c for c in components if c.nrows < (med_comp_height * 2)]
+    components[:] = [c for c in components if c.black_area()[0] > noise_area_thresh]
+    components[:] = [c for c in components if c.nrows < (med_comp_height * remove_capitals_scale)]
 
     # using the peak locations found earlier, find all connected components that are intersected by
     # a horizontal strip at either edge of each line. these are the lines of text in the manuscript
@@ -471,16 +491,24 @@ def parse_transcript(filename, syllables=False):
     file.close()
 
     lines = lines.lower()
-    lines = lines.replace('\n', '')
+    words_begin = []
 
     if not syllables:
         lines = lines.replace('-', '')
         lines = lines.replace(' ', '')
+        lines = lines.replace('\n', '')
     else:
         lines = lines.replace('.', '')
-        lines = re.compile('[- ]').split(lines)
+        lines = lines.replace(' ', '- ')
+        lines = lines.replace('\n', '')
+        lines = re.compile('[-]').split(lines)
 
-    return lines
+        for i, x in enumerate(lines):
+            if x[0] == ' ':
+                x = x[1:]
+                words_begin.append(i)
+
+    return lines, words_begin
 
 
 def next_possible_prototypes(string, prototypes):
@@ -582,7 +610,7 @@ def align_breaks_fitness(syllable_groups, group_lengths, syl_lengths):
     for i, x in enumerate(syllable_groups):
         new_sum = sum(syl_lengths[cur_pos:cur_pos + x])
         cur_pos += x
-        cost += (new_sum - group_lengths[i]) ** 2
+        cost += abs(new_sum - group_lengths[i])
 
     return round(cost / len(syllable_groups))
 
@@ -722,15 +750,21 @@ if __name__ == "__main__":
         width = sum([x.ncols for x in g])
         group_lengths.append(width)
 
-    transcript_string = parse_transcript('./png/' + filename + '.txt', syllables=True)
+    transcript_string, words_begin = parse_transcript('./png/' + filename + '.txt', syllables=True)
     transcript_lengths = [len(x) for x in transcript_string]
 
+    # estimate length of each syllable
     avg_char_length = round(sum(group_lengths) / sum(transcript_lengths))
     avg_syl_length = round(sum(group_lengths) / len(group_lengths))
-    syl_lengths = [x * avg_char_length for x in transcript_lengths]
-    # print(align_breaks_fitness(test_grouping, group_lengths, syl_lengths))
+    syl_lengths = []
+    letter_dict = defaultdict(lambda: avg_char_length, **letter_width_dict)
+    for syl in transcript_string:
+        this_width = 0
+        for char in syl:
+            this_width += letter_dict[char]
+        syl_lengths.append(this_width)
 
-    # some alignments to start us off
+    # parameters for dynprogramming approach
     sequences = [[]]
     completed_sequences = []
     max_syllables_scale = 4
@@ -746,10 +780,10 @@ if __name__ == "__main__":
         print('group length', gl)
 
         # get max number of syllables that could possibly be assigned to this blob
-        max_branches = int(np.ceil(gl * max_syllables_scale / avg_char_length))
+        max_branches = 5
 
         # get lower bound on number of syllables that could possibly be assigned to this blob
-        min_branches = int(np.floor(gl * min_syllables_scale / avg_char_length))
+        min_branches = 0
         if gl > max_noise_width:
             min_branches = 1
 
@@ -786,15 +820,6 @@ if __name__ == "__main__":
         # remove all but the least costly sequences
         print('len new sequences', len(new_sequences))
         new_sequences.sort(key=lambda x: x[0])
-
-        # remove completed sequences which have used up every single syllable
-        # full = [x for x in new_sequences
-        #     if sum(x[1]) == len(syl_lengths)]
-        # for x in full:
-        #     print('some branches full!')
-        #     new_sequences.remove(x)
-        #     completed_sequences.append(x)
-        # max_blob_sequences -= len(full)
 
         sequences = [x[1] for x in new_sequences][:max_blob_sequences]
 
@@ -854,7 +879,6 @@ def brute_force_blob_alignment(group_lengths, syl_lengths):
 # sg = graph.subgraph(subgraph_nodes)
 # nx.draw_kamada_kawai(sg, **options)
 # plt.savefig('testplot.png', dpi=800)
-#
 
 # sdf = [x.nrows for x in ccs]
 # plt.clf()
