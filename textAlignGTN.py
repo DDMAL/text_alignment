@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 reload(textUnit)
 
-filename = 'CF-011_3'
+filename = 'CF-015_3'
 
 # PARAMETERS FOR PREPROCESSING
 saturation_thresh = 0.5
@@ -25,20 +25,20 @@ noise_area_thresh = 700        # an int in : ignore ccs with area smaller than t
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.60     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-remove_capitals_scale = 4
+remove_capitals_scale = 2
 
 char_filter_size = 5
 
 # CC GROUPING (BLOBS)
 letter_horizontal_tolerance = 10
-cc_group_gap_min = 14  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 18  # any gap at least this wide will be assumed to be a space between words!
 min_letter_width = 35
 max_noise_width = 50
 
 letter_width_dict = {
-    '*': 200,
+    '*': 20,
     'm': 128,
     'l': 36,
     'i': 36,
@@ -296,18 +296,20 @@ def identify_text_lines(image_bin):
     # that is closer to the center of the component's bounding box
     # TODO: SOMETHING IS GOING VERY WRONG HERE????? LOOK AT FOLIO 12
     for n in range(len(cc_lines) - 1):
-        intersect = set(cc_lines[n]) & set(cc_lines[n+1])
+        intersect = set(cc_lines[n]) & set(cc_lines[n + 1])
 
-        # print((len(intersect), len(cc_lines[n]), len(cc_lines[n+1])))
-        if (len(cc_lines[n]) == len(cc_lines[n+1])):
-            cc_lines[n + 1] = []
+        print(len(intersect), len(cc_lines[n]), len(cc_lines[n + 1]))
+        # if most of the ccs are shared between these lines, just delete one of them
+        if len(intersect) > (0.5 * min(len(cc_lines[n]), len(cc_lines[n + 1]))):
+            print('removing')
+            cc_lines[n] = []
             continue
 
         for i in intersect:
 
             box_center = i.offset_y + (i.nrows / 2)
             distance_up = abs(peak_locations[n] - box_center)
-            distance_down = abs(peak_locations[n+1] - box_center)
+            distance_down = abs(peak_locations[n + 1] - box_center)
 
             if distance_up > distance_down:
                 cc_lines[n].remove(i)
@@ -502,7 +504,7 @@ def parse_transcript(filename, syllables=False):
         lines = lines.replace(' ', '- ')
         lines = lines.replace('\n', '')
         lines = re.compile('[-]').split(lines)
-
+        words_begin.append(0)
         for i, x in enumerate(lines):
             if x[0] == ' ':
                 x = x[1:]
@@ -767,43 +769,36 @@ if __name__ == "__main__":
     # parameters for dynprogramming approach
     sequences = [[]]
     completed_sequences = []
-    max_syllables_scale = 4
-    min_syllables_scale = 0
     max_blob_sequences = 2500
 
-    # iterating over blobs: TRY SWITCHING OVER TO AVERAGE SYLLABLE LENGTH RATHER THAN LETTER LENGTH
+    # iterating over blobs
     for i, gl in enumerate(group_lengths[:-1]):
         print('sequences begin length', len(sequences))
-        print(sum(sequences[0]))
+        print(sequences[0])
 
         new_sequences = []
         print('group length', gl)
 
-        # get max number of syllables that could possibly be assigned to this blob
-        max_branches = 5
-
-        # get lower bound on number of syllables that could possibly be assigned to this blob
-        min_branches = 0
-        if gl > max_noise_width:
-            min_branches = 1
-
-        print('min/max branches', min_branches, max_branches)
-
         branches = []
         for seq in sequences:
             # consider appending 1 to this sequence, then 2, and so on until it gets unreasonable
-            remaining_leeway = len(syl_lengths) - sum(seq)
-
-            if remaining_leeway <= min_branches:
-                branches += [seq + [remaining_leeway]]
-                continue
 
             if gl <= min_letter_width:
                 branches += [seq + [0]]
                 continue
 
-            branches += [seq + [i] for i
-                    in range(min_branches, min(max_branches, remaining_leeway))]
+            # get lower bound on number of syllables that could possibly be assigned to this blob
+            min_branches = 0
+            if gl > max_noise_width:
+                min_branches = 1
+
+            # max number of branches = branch syllables until reach end of current word
+            pos = sum(seq)
+            next_words = [x for x in words_begin if x > pos]
+            next_word_start = next_words[0] if next_words else len(transcript_string)
+            max_branches = next_word_start - pos + 1
+
+            branches += [seq + [i] for i in range(min_branches, max_branches)]
 
         print('num branches', len(branches))
         sums_and_seqs = [(sum(x), x) for x in branches]
