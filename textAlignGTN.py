@@ -14,18 +14,17 @@ from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 reload(textUnit)
 
-filename = 'CF-015_3'
+filename = 'CF-017_3'
 
 # PARAMETERS FOR PREPROCESSING
-saturation_thresh = 0.5
+saturation_thresh = 0.7
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 700        # an int in : ignore ccs with area smaller than this
-
+noise_area_thresh = 1200        # an int in : ignore ccs with area smaller than this
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.60     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.80     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
 remove_capitals_scale = 2
 
@@ -33,19 +32,19 @@ char_filter_size = 5
 
 # CC GROUPING (BLOBS)
 letter_horizontal_tolerance = 10
-cc_group_gap_min = 18  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 14  # any gap at least this wide will be assumed to be a space between words!
 min_letter_width = 35
 max_noise_width = 50
 
 letter_width_dict = {
     '*': 20,
-    'm': 128,
-    'l': 36,
-    'i': 36,
-    'a': 84,
-    'c': 60,
-    'e': 59,
-    'r': 60
+    # 'm': 128,
+    # 'l': 36,
+    # 'i': 36,
+    # 'a': 84,
+    # 'c': 60,
+    # 'e': 59,
+    # 'r': 60
 }
 
 # PARAMETERS FOR GRAPH SEARCH
@@ -333,6 +332,7 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
     cc_copy = cc_list[:]
     result = [[cc_copy.pop(0)]]
 
+    # iterate over copy of this the line, removing
     while(cc_copy):
 
         current_group = result[-1]
@@ -507,7 +507,7 @@ def parse_transcript(filename, syllables=False):
         words_begin.append(0)
         for i, x in enumerate(lines):
             if x[0] == ' ':
-                x = x[1:]
+                lines[i] = lines[i][1:]
                 words_begin.append(i)
 
     return lines, words_begin
@@ -772,7 +772,7 @@ if __name__ == "__main__":
     max_blob_sequences = 2500
 
     # iterating over blobs
-    for i, gl in enumerate(group_lengths[:-1]):
+    for i, gl in enumerate(group_lengths):
         print('sequences begin length', len(sequences))
         print(sequences[0])
 
@@ -783,17 +783,20 @@ if __name__ == "__main__":
         for seq in sequences:
             # consider appending 1 to this sequence, then 2, and so on until it gets unreasonable
 
-            if gl <= min_letter_width:
-                branches += [seq + [0]]
-                continue
+            # if gl <= min_letter_width:
+            #     branches += [seq + [0]]
+            #     continue
 
-            # get lower bound on number of syllables that could possibly be assigned to this blob
+            # lower bound on number of syllables that could possibly be assigned to this blob?
             min_branches = 0
-            if gl > max_noise_width:
-                min_branches = 1
 
             # max number of branches = branch syllables until reach end of current word
             pos = sum(seq)
+
+            if pos == len(transcript_string):
+                branches.append(seq)
+                continue
+
             next_words = [x for x in words_begin if x > pos]
             next_word_start = next_words[0] if next_words else len(transcript_string)
             max_branches = next_word_start - pos + 1
