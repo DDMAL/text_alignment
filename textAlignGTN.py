@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 reload(textUnit)
 
-filename = 'CF-017_3'
+filename = 'CF-011_3'
 
 # PARAMETERS FOR PREPROCESSING
 saturation_thresh = 0.7
@@ -32,9 +32,9 @@ char_filter_size = 5
 
 # CC GROUPING (BLOBS)
 letter_horizontal_tolerance = 10
-cc_group_gap_min = 14  # any gap at least this wide will be assumed to be a space between words!
-min_letter_width = 35
-max_noise_width = 50
+cc_group_gap_min = 15  # any gap at least this wide will be assumed to be a space between words!
+# min_letter_width = 35
+# max_noise_width = 50
 
 letter_width_dict = {
     '*': 20,
@@ -115,6 +115,33 @@ def draw_lines(image, line_locs, horizontal=True):
             end = gc.FloatPoint(l, image.nrows)
         new.draw_line(start, end, 1, 5)
     return new
+
+
+def draw_blob_alignment(alignment_groups, transcript_string,
+                        cc_groups, gamera_image, size=55, fname='testimg.png'):
+    '''
+    visualizes the alignment given in @alignment_groups.
+    '''
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+
+    cur_syl_index = 0
+    for i in range(len(alignment_groups)):
+        end_syl_index = cur_syl_index + alignment_groups[i]
+        used_syllables_indices = list(range(cur_syl_index, end_syl_index))
+        cur_syl_index = end_syl_index
+        used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
+        used_syllables = str(alignment_groups[i]) + " " + used_syllables
+
+        ul, lr = bounding_box(cc_groups[i])
+        position = (ul.x, ul.y - size)
+        draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
+
+        draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
+
+    image.save(fname)
 
 
 def bases_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
@@ -588,36 +615,11 @@ def get_branches_of_sequence(current_seq, graph):
     return branches, True
 
 
-def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
-    gamera_image.save_image(fname)
-    image = pil.Image.open(fname)
-    draw = pil.ImageDraw.Draw(image)
-    font = pil.ImageFont.truetype('Arial.ttf', size=size)
-    edges = list(seq.used_edges)
-
-    for i in range(len(edges)):
-        unit = graph[edges[i][0]][edges[i][1]]['object']
-        pos = (unit.ul.x, unit.ul.y - size)
-        text = seq.predicted_string[i][0].split('_')[0]
-        draw.text(pos, text, fill='rgb(0, 0, 0)', font=font)
-        draw.rectangle((unit.ul.x, unit.ul.y, unit.lr.x, unit.lr.y), outline='rgb(0, 0, 0)')
-
-    image.save(fname)
-
-
-def align_breaks_fitness(syllable_groups, group_lengths, syl_lengths):
-
-    cur_pos = 0
-    cost = 0
-    for i, x in enumerate(syllable_groups):
-        new_sum = sum(syl_lengths[cur_pos:cur_pos + x])
-        cur_pos += x
-        cost += abs(new_sum - group_lengths[i])
-
-    return round(cost / len(syllable_groups))
-
-
 def text_unit_method():
+    '''
+    old method based on looking at every single character in isolation / oversegmentation.
+    probably overkill
+    '''
 
     # filenames = os.listdir('./png')
     # filenames = ['CF-011_3']
@@ -712,28 +714,36 @@ def text_unit_method():
     test_text(image, completed_sequences[0], graph)
 
 
-def draw_blob_alignment(alignment_groups, transcript_string,
-                        cc_groups, gamera_image, size=55, fname='testimg.png'):
+def test_text(gamera_image, seq, graph, size=70, fname='testimg.png'):
     gamera_image.save_image(fname)
     image = pil.Image.open(fname)
     draw = pil.ImageDraw.Draw(image)
     font = pil.ImageFont.truetype('Arial.ttf', size=size)
+    edges = list(seq.used_edges)
 
-    cur_syl_index = 0
-    for i in range(len(alignment_groups)):
-        end_syl_index = cur_syl_index + alignment_groups[i]
-        used_syllables_indices = list(range(cur_syl_index, end_syl_index))
-        cur_syl_index = end_syl_index
-        used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
-        used_syllables = str(alignment_groups[i]) + " " + used_syllables
-
-        ul, lr = bounding_box(cc_groups[i])
-        position = (ul.x, ul.y - size)
-        draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
-
-        draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
+    for i in range(len(edges)):
+        unit = graph[edges[i][0]][edges[i][1]]['object']
+        pos = (unit.ul.x, unit.ul.y - size)
+        text = seq.predicted_string[i][0].split('_')[0]
+        draw.text(pos, text, fill='rgb(0, 0, 0)', font=font)
+        draw.rectangle((unit.ul.x, unit.ul.y, unit.lr.x, unit.lr.y), outline='rgb(0, 0, 0)')
 
     image.save(fname)
+
+
+def align_breaks_fitness(syllable_groups, group_lengths, syl_lengths):
+    '''
+    given an alignment between text blobs on the manuscript and syllables of the transcript,
+    computes the error of the alignment based on the estimated syllable lengths and the known lengths present in the original image.
+    '''
+    cur_pos = 0
+    cost = 0
+    for i, x in enumerate(syllable_groups):
+        new_sum = sum(syl_lengths[cur_pos:cur_pos + x])
+        cur_pos += x
+        cost += abs(new_sum - group_lengths[i]) ** 2
+
+    return round(cost / len(syllable_groups))
 
 
 if __name__ == "__main__":
@@ -766,10 +776,10 @@ if __name__ == "__main__":
             this_width += letter_dict[char]
         syl_lengths.append(this_width)
 
-    # parameters for dynprogramming approach
+    # set up for sequence searching
     sequences = [[]]
     completed_sequences = []
-    max_blob_sequences = 2500
+    max_blob_sequences = 10000  # probably unnecessary but just in case, so nothing gets stuck
 
     # iterating over blobs
     for i, gl in enumerate(group_lengths):
@@ -781,11 +791,6 @@ if __name__ == "__main__":
 
         branches = []
         for seq in sequences:
-            # consider appending 1 to this sequence, then 2, and so on until it gets unreasonable
-
-            # if gl <= min_letter_width:
-            #     branches += [seq + [0]]
-            #     continue
 
             # lower bound on number of syllables that could possibly be assigned to this blob?
             min_branches = 0
@@ -809,7 +814,6 @@ if __name__ == "__main__":
 
         for key, group in iter.groupby(sums_and_seqs, lambda x: x[0]):
             group = [x[1] for x in group]
-            # print(key, group)
             scores = [(align_breaks_fitness(x, group_lengths, syl_lengths), x) for x in group]
             best_group_member = min(scores, key=lambda x: x[0])
             new_sequences.append(best_group_member)
@@ -835,35 +839,6 @@ if __name__ == "__main__":
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
         syl_length_sum = sum([syl_lengths[j] for j in used_syllables_indices])
         res.append((group_lengths[i], syl_length_sum, used_syllables,  x))
-
-
-def brute_force_blob_alignment(group_lengths, syl_lengths):
-    # brute force greedy alignment; let's see how that works first
-    alignment_groups = []
-    blob_index = 0
-    current_dist = 0
-    for tl in syl_lengths:
-
-        if blob_index >= len(group_lengths):
-            print('ran out of blobs!')
-            break
-
-        candidate_dist = current_dist + tl
-        target = group_lengths[blob_index]
-        current_badness = abs(current_dist - target)
-        candidate_badness = abs(candidate_dist - target)
-
-        print(blob_index, tl, target)
-
-        if current_badness <= candidate_badness:
-            blob_index += 1
-            current_dist = tl
-        else:
-            current_dist += tl
-
-        alignment_groups.append(blob_index)
-
-    return alignment_groups
 
 
 # options = {
