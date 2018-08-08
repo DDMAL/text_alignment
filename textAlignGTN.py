@@ -20,7 +20,7 @@ filename = 'CF-011_3'
 saturation_thresh = 0.7
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 1200        # an int in : ignore ccs with area smaller than this
+noise_area_thresh = 700        # an int in : ignore ccs with area smaller than this
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
@@ -778,7 +778,6 @@ if __name__ == "__main__":
 
     # set up for sequence searching
     sequences = [[]]
-    completed_sequences = []
     max_blob_sequences = 10000  # probably unnecessary but just in case, so nothing gets stuck
 
     # iterating over blobs
@@ -827,7 +826,6 @@ if __name__ == "__main__":
 
         print("----")
 
-    # best_seq = min(completed_sequences, key=lambda x: x[0])[1]
     draw_blob_alignment(sequences[0], transcript_string, cc_groups, image)
 
     res = []
