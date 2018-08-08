@@ -11,17 +11,17 @@ import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 
-filename = 'CF-011_3'
+filename = 'CF-016_3'
 
 # PARAMETERS FOR PREPROCESSING
 saturation_thresh = 0.6
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 700        # an int in : ignore ccs with area smaller than this
+noise_area_thresh = 600        # an int in : ignore ccs with area smaller than this
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.80     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
 remove_capitals_scale = 2
 
@@ -30,13 +30,12 @@ cc_group_gap_min = 15  # any gap at least this wide will be assumed to be a spac
 
 letter_width_dict = {
     '*': 20,
-    # 'm': 128,
-    # 'l': 36,
-    # 'i': 36,
-    # 'a': 84,
-    # 'c': 60,
-    # 'e': 59,
-    # 'r': 60
+    'm': 128,
+    'l': 36,
+    'i': 36,
+    'a': 84,
+    'c': 60,
+    'e': 59,
 }
 
 
@@ -219,11 +218,13 @@ def moving_avg_filter(data, filter_size):
     return smoothed
 
 
-def preprocess_image(input_image, sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
-            despeckle_amt=despeckle_amt, filter_runs=30):
+def preprocess_images(input_image, staff_image,
+                    sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
+                    despeckle_amt=despeckle_amt, filter_runs=10):
 
     image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
     image_bin = input_image.to_onebit().subtract_images(image_sats)
+    staff_image = staff_image.to_onebit()
 
     # keep only colored ccs above a certain size
     ccs = image_bin.cc_analysis()
@@ -241,12 +242,14 @@ def preprocess_image(input_image, sat_tresh=saturation_thresh, sat_area_thresh=s
     # find likely rotation angle and correct
     angle, tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle=angle)
+    staff_image = staff_image.rotate(angle=angle)
     for i in range(filter_runs):
         image_bin.filter_short_runs(5, 'black')
         image_bin.filter_narrow_runs(5, 'black')
-    image_bin.despeckle(despeckle_amt)
+        staff_image.filter_narrow_runs(50, 'white')
+    staff_image.despeckle(despeckle_amt)
 
-    return image_bin
+    return image_bin, staff_image
 
 
 def identify_text_lines(image_bin):
@@ -263,13 +266,15 @@ def identify_text_lines(image_bin):
     # tall; assume these to be ornamental letters
     print('connected component analysis...')
     components = image_bin.cc_analysis()
-    med_comp_height = np.median([c.nrows for c in components])
 
     for c in components:
         if c.black_area()[0] < noise_area_thresh:
             c.fill_white()
 
     components[:] = [c for c in components if c.black_area()[0] > noise_area_thresh]
+
+    med_comp_height = np.median([c.nrows for c in components])
+
     components[:] = [c for c in components if c.nrows < (med_comp_height * remove_capitals_scale)]
 
     # using the peak locations found earlier, find all connected components that are intersected by
@@ -287,7 +292,6 @@ def identify_text_lines(image_bin):
     for n in range(len(cc_lines) - 1):
         intersect = set(cc_lines[n]) & set(cc_lines[n + 1])
 
-        print(len(intersect), len(cc_lines[n]), len(cc_lines[n + 1]))
         # if most of the ccs are shared between these lines, just delete one of them
         if len(intersect) > (0.5 * min(len(cc_lines[n]), len(cc_lines[n + 1]))):
             print('removing')
@@ -311,6 +315,58 @@ def identify_text_lines(image_bin):
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
     return cc_lines, peak_locations
+
+
+def find_ccs_under_staves(cc_lines, staff_image, min_line_length_scale=0.2):
+    '''
+    actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria
+    '''
+
+    cc_lines_flat = reduce((lambda x, y: x + y), cc_lines)
+    staff_ccs = staff_image.cc_analysis()
+    longest_line = max([x.ncols for x in staff_ccs])
+    staff_ccs[:] = [x for x in staff_ccs if x.ncols > min_line_length_scale * longest_line]
+
+    # first filter out all ccs not directly below a staff
+    # for every cc, bring a line down across the whole page thru its center.
+    for i in reversed(range(len(cc_lines))):
+
+        to_remove = []
+
+        for j in range(len(cc_lines[i])):
+            cur_comp = cc_lines[i][j]
+            comp_center = cur_comp.offset_x + (cur_comp.ncols / 2)
+
+            # all staff lines that cross this vertical line, above or below
+            lines_cross = [x for x in staff_ccs if
+                x.offset_x <= comp_center <= x.offset_x + x.ncols]
+
+            # all other components that cross this vertical line, above or below
+            ccs_cross = [x for x in cc_lines_flat if
+                x.offset_x <= comp_center <= x.offset_x + x.ncols]
+
+            # find vertical position of first staff line above this component
+            lines_cross_above = [x.offset_y for x in lines_cross if
+                x.offset_y < cur_comp.offset_y]
+            closest_line_pos = max(lines_cross_above + [0])
+
+            # find vertical position of first other component above this component
+            lines_cross_above = [x.offset_y for x in ccs_cross if
+                x.offset_y < cur_comp.offset_y]
+            closest_cc_pos = max(lines_cross_above + [0])
+
+            print(closest_cc_pos, closest_line_pos, cur_comp.offset_y)
+
+            if closest_cc_pos > closest_line_pos or closest_line_pos == 0:
+                to_remove.append(cur_comp)
+                print('remove')
+
+        for tr in to_remove:
+            cc_lines[i].remove(tr)
+
+    cc_lines[:] = [x for x in cc_lines if bool(x)]
+
+    return cc_lines
 
 
 def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
@@ -399,8 +455,11 @@ if __name__ == "__main__":
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '.png')
-    image = preprocess_image(raw_image)
+    staff_image = gc.load_image('./png/' + filename[:-1] + '2.png')
+    image, staff_image = preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = identify_text_lines(image)
+
+    cc_lines = find_ccs_under_staves(cc_lines, staff_image)
 
     cc_groups = []
     for x in cc_lines:
