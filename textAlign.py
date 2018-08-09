@@ -11,7 +11,7 @@ import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 
-filename = 'CF-016_3'
+filename = 'CF-013_3'
 
 # PARAMETERS FOR PREPROCESSING
 saturation_thresh = 0.6
@@ -21,7 +21,7 @@ noise_area_thresh = 600        # an int in : ignore ccs with area smaller than t
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
 remove_capitals_scale = 2
 
@@ -78,7 +78,7 @@ def draw_lines(image, line_locs, horizontal=True):
         else:
             start = gc.FloatPoint(l, 0)
             end = gc.FloatPoint(l, image.nrows)
-        new.draw_line(start, end, 1, 5)
+        new.draw_line(start, end, 1, 2)
     return new
 
 
@@ -205,7 +205,7 @@ def find_peak_locations(data, tol=prominence_tolerance):
     return peak_locs
 
 
-def moving_avg_filter(data, filter_size):
+def moving_avg_filter(data, filter_size=filter_size):
     '''
     returns a list containing the data in @data filtered through a moving-average filter of size
     @filter_size to either side; that is, filter_size = 1 gives a size of 3, filter size = 2 gives
@@ -317,33 +317,37 @@ def identify_text_lines(image_bin):
     return cc_lines, peak_locations
 
 
-def find_ccs_under_staves(cc_lines, staff_image, min_line_length_scale=0.2):
+def find_ccs_under_staves(cc_lines, staff_image,
+            min_line_length_scale=0.2, max_distance_to_staff=199):
     '''
     actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria
     '''
 
+    proj = moving_avg_filter(staff_image.projection_rows())
+    staff_peaks = find_peak_locations(proj)
+
     cc_lines_flat = reduce((lambda x, y: x + y), cc_lines)
     staff_ccs = staff_image.cc_analysis()
     longest_line = max([x.ncols for x in staff_ccs])
-    staff_ccs[:] = [x for x in staff_ccs if x.ncols > min_line_length_scale * longest_line]
+    # staff_ccs[:] = [x for x in staff_ccs if x.ncols > min_line_length_scale * longest_line]
 
     # first filter out all ccs not directly below a staff
     # for every cc, bring a line down across the whole page thru its center.
     for i in reversed(range(len(cc_lines))):
 
-        to_remove = []
+        to_remove = set()
 
         for j in range(len(cc_lines[i])):
             cur_comp = cc_lines[i][j]
-            comp_center = cur_comp.offset_x + (cur_comp.ncols / 2)
+            comp_center_h = cur_comp.offset_x + (cur_comp.ncols / 2)
 
             # all staff lines that cross this vertical line, above or below
             lines_cross = [x for x in staff_ccs if
-                x.offset_x <= comp_center <= x.offset_x + x.ncols]
+                x.offset_x <= comp_center_h <= x.offset_x + x.ncols]
 
             # all other components that cross this vertical line, above or below
             ccs_cross = [x for x in cc_lines_flat if
-                x.offset_x <= comp_center <= x.offset_x + x.ncols]
+                x.offset_x <= comp_center_h <= x.offset_x + x.ncols]
 
             # find vertical position of first staff line above this component
             lines_cross_above = [x.offset_y for x in lines_cross if
@@ -356,10 +360,20 @@ def find_ccs_under_staves(cc_lines, staff_image, min_line_length_scale=0.2):
             closest_cc_pos = max(lines_cross_above + [0])
 
             print(closest_cc_pos, closest_line_pos, cur_comp.offset_y)
+            distance_to_staff = cur_comp.offset_y - closest_line_pos
 
-            if closest_cc_pos > closest_line_pos or closest_line_pos == 0:
-                to_remove.append(cur_comp)
-                print('remove')
+            if (closest_cc_pos > closest_line_pos
+                    or closest_line_pos == 0
+                    or distance_to_staff > max_distance_to_staff):
+                to_remove.add(cur_comp)
+
+            # next, remove everything horizontally aligned with a staff
+
+            comp_center_v = cur_comp.offset_y + (cur_comp.nrows / 2)
+            lines_cross_h = min([abs(x - comp_center_v) for x in staff_peaks])
+
+            if lines_cross_h > max_distance_to_staff:
+                to_remove.add(cur_comp)
 
         for tr in to_remove:
             cc_lines[i].remove(tr)
@@ -410,8 +424,9 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
 def parse_transcript(filename, syllables=False):
     file = open(filename, 'r')
     lines = file.readlines()
+    lines = [x for x in lines if not x[0] == '#']
     lines = ['*' + x[1:] for x in lines]
-    lines = ' '.join([x for x in lines if not x[0] == '#'])
+    lines = ' '.join(lines)
     file.close()
 
     lines = lines.lower()
@@ -545,3 +560,8 @@ if __name__ == "__main__":
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
         syl_length_sum = sum([syl_lengths[j] for j in used_syllables_indices])
         res.append((group_lengths[i], syl_length_sum, used_syllables,  x))
+
+proj = moving_avg_filter(staff_image.projection_rows())
+staff_peaks = find_peak_locations(proj)
+imsv(draw_lines(image, staff_peaks))
+plot([np.log(x+1) / np.log(max(proj)) for x in proj])
