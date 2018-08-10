@@ -28,16 +28,16 @@ collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when cl
 remove_capitals_scale = 2
 
 # CC GROUPING (BLOBS)
-cc_group_gap_min = 17  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 18  # any gap at least this wide will be assumed to be a space between words!
 
 letter_width_dict = {
     '*': 20,
-#     'm': 128,
-#     'l': 36,
-#     'i': 36,
-#     'a': 84,
-#     'c': 60,
-#     'e': 59,
+    'm': 128,
+    'l': 36,
+    'i': 36,
+    'a': 84,
+    'c': 60,
+    'e': 59,
 }
 
 
@@ -296,7 +296,6 @@ def identify_text_lines(image_bin):
 
         # if most of the ccs are shared between these lines, just delete one of them
         if len(intersect) > (0.5 * min(len(cc_lines[n]), len(cc_lines[n + 1]))):
-            print('removing')
             cc_lines[n] = []
             continue
 
@@ -361,7 +360,7 @@ def find_ccs_under_staves(cc_lines, staff_image,
                 x.offset_y < cur_comp.offset_y]
             closest_cc_pos = max(lines_cross_above + [0])
 
-            print(closest_cc_pos, closest_line_pos, cur_comp.offset_y)
+            # print(closest_cc_pos, closest_line_pos, cur_comp.offset_y)
             distance_to_staff = cur_comp.offset_y - closest_line_pos
 
             if (closest_cc_pos > closest_line_pos
@@ -468,7 +467,8 @@ def alignment_fitness(alignment, group_lengths, syl_lengths):
     return round(cost / len(alignment))
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
+def process(filename):
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '.png')
@@ -552,7 +552,8 @@ if __name__ == "__main__":
 
         print("----")
 
-    draw_blob_alignment(sequences[0], transcript_string, cc_groups, image)
+    draw_blob_alignment(sequences[0], transcript_string, cc_groups,
+                        image, fname="testimg " + filename + ".png")
 
     res = []
     pos = 0
@@ -564,7 +565,14 @@ if __name__ == "__main__":
         syl_length_sum = sum([syl_lengths[j] for j in used_syllables_indices])
         res.append((group_lengths[i], syl_length_sum, used_syllables,  x))
 
-proj = moving_avg_filter(staff_image.projection_rows())
-staff_peaks = find_peak_locations(proj)
-imsv(draw_lines(image, staff_peaks))
-plot([np.log(x+1) / np.log(max(proj)) for x in proj])
+
+nums = list(range(11, 21)) + list(range(24, 35))
+fnames = ['CF-0' + str(x) + '_3' for x in nums]
+for fn in fnames:
+    process(fn)
+
+
+# proj = moving_avg_filter(staff_image.projection_rows())
+# staff_peaks = find_peak_locations(proj)
+# imsv(draw_lines(image, staff_peaks))
+# plot([np.log(x+1) / np.log(max(proj)) for x in proj])

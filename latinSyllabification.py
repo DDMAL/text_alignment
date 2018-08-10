@@ -1,12 +1,16 @@
 import re
 
 consonant_groups = ['qu', 'fl', 'fr', 'st', 'br', 'cr', 'pr', 'tr', 'ct', 'th']
-dipthongs = ['iu', 'ae', 'au', 'io', 'ihe', 'oe', 'ua', 'ue', 'ui', 'uo']
+dipthongs = ['iu', 'au', 'io', 'ihe', 'oe', 'ua', 'ui', 'uo']
 vowels = ['a', 'e', 'i', 'o', 'u']
 
 
 def syllabify_word(word):
     res = word
+
+    if res == 'euouae':
+        return 'e-u-o-u-ae'
+
     # put square brackets around all dipthongs and vowels (using lookbehind/lookahead regex to make sure that vowels are not found within dipthongs)
     for dt in dipthongs:
         res = res.replace(dt, '[' + dt + ']')
@@ -66,10 +70,12 @@ def parse_transcript(filename, syllabify=True):
     lines = [x for x in lines if not x[0] == '#']
     # lines = ['*' + x[1:] for x in lines]
     lines = ' '.join(lines)
-    lines = lines.lower()
 
-    words = [syllabify_word(x) for x in re.compile(' ').split(lines)]
-    lines = ' '.join(words)
+    split_lines = []
+    for line in lines:
+        line = line.lower()
+        words = [syllabify_word(x) for x in re.compile(' ').split(line)]
+        split_lines.append(' '.join(words))
 
     lines = lines.replace('.', '')
     lines = lines.replace('| ', '')
