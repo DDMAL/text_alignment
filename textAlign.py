@@ -5,13 +5,15 @@ from gamera.plugins.image_utilities import union_images
 import itertools as iter
 import os
 import re
+import latinSyllabification
 from os.path import isfile, join
 import numpy as np
 import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
+reload(latinSyllabification)
 
-filename = 'CF-013_3'
+filename = 'CF-011_3'
 
 # PARAMETERS FOR PREPROCESSING
 saturation_thresh = 0.6
@@ -26,16 +28,16 @@ collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when cl
 remove_capitals_scale = 2
 
 # CC GROUPING (BLOBS)
-cc_group_gap_min = 15  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 17  # any gap at least this wide will be assumed to be a space between words!
 
 letter_width_dict = {
     '*': 20,
-    'm': 128,
-    'l': 36,
-    'i': 36,
-    'a': 84,
-    'c': 60,
-    'e': 59,
+#     'm': 128,
+#     'l': 36,
+#     'i': 36,
+#     'a': 84,
+#     'c': 60,
+#     'e': 59,
 }
 
 
@@ -485,7 +487,8 @@ if __name__ == "__main__":
         width = sum([x.ncols for x in g])
         group_lengths.append(width)
 
-    transcript_string, words_begin = parse_transcript('./png/' + filename + '.txt', syllables=True)
+    transcript_string, words_begin = latinSyllabification.parse_transcript(
+            './png/' + filename + '.txt')
     transcript_lengths = [len(x) for x in transcript_string]
 
     # estimate length of each syllable
