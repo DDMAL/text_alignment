@@ -28,7 +28,7 @@ collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when cl
 remove_capitals_scale = 2
 
 # CC GROUPING (BLOBS)
-cc_group_gap_min = 18  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 16  # any gap at least this wide will be assumed to be a space between words!
 
 letter_width_dict = {
     '*': 20,

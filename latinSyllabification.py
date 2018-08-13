@@ -59,6 +59,7 @@ def syllabify_word(word):
 
     # remove brackets
     res = re.sub(r"[\[\]]", "", res)
+
     return res
 
 
@@ -69,29 +70,32 @@ def parse_transcript(filename, syllabify=True):
 
     lines = [x for x in lines if not x[0] == '#']
     # lines = ['*' + x[1:] for x in lines]
-    lines = ' '.join(lines)
+    # lines = ' '.join(lines)
 
-    split_lines = []
+    text = ''
+
     for line in lines:
         line = line.lower()
+        line = line.replace('|', '')
+        line = line.replace('.', '')
+        line = line.strip(' \t\n\r')
         words = [syllabify_word(x) for x in re.compile(' ').split(line)]
-        split_lines.append(' '.join(words))
+        words[0] = '*' + words[0][1:]
+        text = text + ' '.join(words) + ' '
 
-    lines = lines.replace('.', '')
-    lines = lines.replace('| ', '')
-    lines = lines.replace(' ', '- ')
-    lines = lines.replace('\n', '')
-    lines = re.compile('[-]').split(lines)
+    text = text.strip(' \t\n\r')
+    text = text.replace(' ', '- ')
+    text = re.compile('[-]').split(text)
 
     words_begin = []
     words_begin.append(0)
-    for i, x in enumerate(lines):
+    for i, x in enumerate(text):
         if x[0] == ' ':
-            lines[i] = lines[i][1:]
+            text[i] = text[i][1:]
             words_begin.append(i)
 
-    return lines, words_begin
+    return text, words_begin
 
 
 if __name__ == "__main__":
-    print(syllabify_word('habaebiodallucs'))
+    print(parse_transcript('./png/CF-018_3.txt'))
