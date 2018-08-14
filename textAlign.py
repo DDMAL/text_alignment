@@ -28,7 +28,7 @@ collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when cl
 remove_capitals_scale = 2
 
 # CC GROUPING (BLOBS)
-cc_group_gap_min = 16  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 10  # any gap at least this wide will be assumed to be a space between words!
 
 letter_width_dict = {
     '*': 20,
@@ -95,18 +95,26 @@ def draw_blob_alignment(alignment_groups, transcript_string,
     font = pil.ImageFont.truetype('Arial.ttf', size=size)
 
     cur_syl_index = 0
+    cur_blob_index = 0
     for i in range(len(alignment_groups)):
-        end_syl_index = cur_syl_index + alignment_groups[i]
+        end_syl_index = cur_syl_index + alignment_groups[i][0]
         used_syllables_indices = list(range(cur_syl_index, end_syl_index))
         cur_syl_index = end_syl_index
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
         used_syllables = str(alignment_groups[i]) + " " + used_syllables
 
-        ul, lr = bounding_box(cc_groups[i])
+        end_blob_index = cur_blob_index + alignment_groups[i][1]
+        used_blob_indices = list(range(cur_blob_index, end_blob_index))
+        cur_blob_index = end_blob_index
+        used_blobs = [cc_groups[j] for j in used_blob_indices]
+
+        ul, lr = bounding_box(used_blobs[0])
         position = (ul.x, ul.y - size)
         draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
 
-        draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
+        for blob in used_blobs:
+            ul, lr = bounding_box(blob)
+            draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
 
     image.save(fname)
 
@@ -463,21 +471,24 @@ def alignment_fitness(alignment, group_lengths, syl_lengths):
     cur_blob_pos = 0
     cost = 0
     for i, x in enumerate(alignment):
-        num_syls = x
-        num_blobs = 1
+        num_syls = x[0]
+        num_blobs = x[1]
 
         new_sum = sum(syl_lengths[cur_syl_pos:cur_syl_pos + num_syls])
         cur_syl_pos += num_syls
-        cost += (new_sum - sum(group_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
+        this_cost = (new_sum - sum(group_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
         cur_blob_pos += num_blobs
 
-    return round(cost / len(alignment))
+        # weight cost of each alignment element by number of blobs
+        cost += this_cost
+
+    return round(cost / cur_blob_pos)
 
 
 if __name__ == "__main__":
     single = True
     filename = 'CF-024_3'
-# def process(filename):
+    # def process(filename):
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '.png')
@@ -518,11 +529,14 @@ if __name__ == "__main__":
     max_blob_sequences = 5000  # probably unnecessary but just in case, so nothing gets stuck
     num_blobs_lookahead = 2
 
+    def current_position_of_seq(seq):
+        return (sum([x[0] for x in seq]), sum([x[1] for x in seq]))
+
     # iterating over blobs
     for i, gl in enumerate(group_lengths):
         lookahead_blobs = group_lengths[i:min(i + num_blobs_lookahead, len(group_lengths))]
         print(lookahead_blobs)
-        # print(sequences[0])
+        print(sequences[0])
 
         new_sequences = []
         # print('group length', gl)
@@ -535,7 +549,7 @@ if __name__ == "__main__":
             min_branches = 0
 
             # max number of branches = branch syllables until reach end of current word
-            pos = sum(seq)
+            pos = current_position_of_seq(seq)[0]
 
             if pos == len(transcript_string):
                 branches.append(seq)
@@ -546,14 +560,15 @@ if __name__ == "__main__":
             max_branches = next_word_start - pos + 1
 
             syl_extensions = list(range(min_branches, max_branches))
-            print(list(iter.product(syl_extensions, [1, 2])))
+            blob_extensions = range(1, num_blobs_lookahead)
 
-            branches += [seq + [i] for i in syl_extensions]
+            branches += [seq + [i] for i in iter.product(syl_extensions, blob_extensions)]
 
-        # print('num branches', len(branches))
+        print('num branches', len(branches))
 
         # filtering step: when two sequences have met the same point (same blob, same syllable), remove the ones with highest cost since they couldn't possibly do any better
-        sums_and_seqs = [(sum(x), x) for x in branches]
+
+        sums_and_seqs = [(current_position_of_seq(x), x) for x in branches]
         sums_and_seqs.sort(key=lambda x: x[0])
 
         for key, group in iter.groupby(sums_and_seqs, lambda x: x[0]):
@@ -571,19 +586,24 @@ if __name__ == "__main__":
 
         # print("----")
 
-    draw_blob_alignment(sequences[0], transcript_string, cc_groups,
-                        image, fname="testimg " + filename + ".png")
-
     res = []
-    pos = 0
+    syl_pos = 0
+    blob_pos = 0
     for i, x in enumerate(sequences[0]):
-        end_syl_index = pos + x
-        used_syllables_indices = list(range(pos, end_syl_index))
-        pos = end_syl_index
+        end_syl_index = syl_pos + x[0]
+        used_syllables_indices = list(range(syl_pos, end_syl_index))
+        syl_pos = end_syl_index
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
         syl_length_sum = sum([syl_lengths[j] for j in used_syllables_indices])
-        res.append((group_lengths[i], syl_length_sum, used_syllables,  x))
 
+        end_blob_index = blob_pos + x[1]
+        used_blob_indices = list(range(blob_pos, end_blob_index))
+        blob_pos = end_blob_index
+        used_blobs = '-'.join([str(group_lengths[j]) for j in used_blob_indices])
+        res.append((used_blobs, used_syllables, syl_length_sum, x))
+
+    draw_blob_alignment(sequences[0], transcript_string, cc_groups,
+                        image, fname="testimg " + filename + ".png")
 
 if not single:
     nums = list(range(11, 21)) + list(range(24, 35))
