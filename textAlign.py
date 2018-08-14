@@ -388,6 +388,8 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
     '''
     a helper function that takes in a list of ccs on the same line and groups them together based
     on contiguity of their bounding boxes along the horizontal axis.
+
+    change: instead of bounding boxes, consider vertical projection of adjacent ccs
     '''
 
     cc_copy = cc_list[:]
@@ -419,7 +421,7 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
         right = result[n+1][0].offset_x
         gap_sizes.append(right - left)
 
-    return result  # , gap_sizes
+    return result, gap_sizes
 
 
 def parse_transcript(filename, syllables=False):
@@ -457,18 +459,25 @@ def alignment_fitness(alignment, group_lengths, syl_lengths):
     computes the error of the alignment based on the estimated syllable lengths and the known
     lengths present in the original image.
     '''
-    cur_pos = 0
+    cur_syl_pos = 0
+    cur_blob_pos = 0
     cost = 0
     for i, x in enumerate(alignment):
-        new_sum = sum(syl_lengths[cur_pos:cur_pos + x])
-        cur_pos += x
-        cost += abs(new_sum - group_lengths[i]) ** 2
+        num_syls = x
+        num_blobs = 1
+
+        new_sum = sum(syl_lengths[cur_syl_pos:cur_syl_pos + num_syls])
+        cur_syl_pos += num_syls
+        cost += (new_sum - sum(group_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
+        cur_blob_pos += num_blobs
 
     return round(cost / len(alignment))
 
 
-# if __name__ == "__main__":
-def process(filename):
+if __name__ == "__main__":
+    single = True
+    filename = 'CF-024_3'
+# def process(filename):
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '.png')
@@ -480,7 +489,9 @@ def process(filename):
 
     cc_groups = []
     for x in cc_lines:
-        cc_groups += group_ccs(x)
+        grouped, gap_sizes = group_ccs(x)
+        print(gap_sizes)
+        cc_groups += grouped
 
     group_lengths = []
     for g in cc_groups:
@@ -505,15 +516,18 @@ def process(filename):
     # set up for sequence searching
     sequences = [[]]
     max_blob_sequences = 5000  # probably unnecessary but just in case, so nothing gets stuck
+    num_blobs_lookahead = 2
 
     # iterating over blobs
     for i, gl in enumerate(group_lengths):
-        print('sequences begin length', len(sequences))
-        print(sequences[0])
+        lookahead_blobs = group_lengths[i:min(i + num_blobs_lookahead, len(group_lengths))]
+        print(lookahead_blobs)
+        # print(sequences[0])
 
         new_sequences = []
-        print('group length', gl)
+        # print('group length', gl)
 
+        # branch out from every sequence in list of sequences
         branches = []
         for seq in sequences:
 
@@ -531,9 +545,14 @@ def process(filename):
             next_word_start = next_words[0] if next_words else len(transcript_string)
             max_branches = next_word_start - pos + 1
 
-            branches += [seq + [i] for i in range(min_branches, max_branches)]
+            syl_extensions = list(range(min_branches, max_branches))
+            print(list(iter.product(syl_extensions, [1, 2])))
 
-        print('num branches', len(branches))
+            branches += [seq + [i] for i in syl_extensions]
+
+        # print('num branches', len(branches))
+
+        # filtering step: when two sequences have met the same point (same blob, same syllable), remove the ones with highest cost since they couldn't possibly do any better
         sums_and_seqs = [(sum(x), x) for x in branches]
         sums_and_seqs.sort(key=lambda x: x[0])
 
@@ -545,12 +564,12 @@ def process(filename):
 
         # after previous for loop new_sequences still has a cost associated with each sequence
         # remove all but the least costly sequences
-        print('len new sequences', len(new_sequences))
+        # print('len new sequences', len(new_sequences))
         new_sequences.sort(key=lambda x: x[0])
 
         sequences = [x[1] for x in new_sequences][:max_blob_sequences]
 
-        print("----")
+        # print("----")
 
     draw_blob_alignment(sequences[0], transcript_string, cc_groups,
                         image, fname="testimg " + filename + ".png")
@@ -566,10 +585,11 @@ def process(filename):
         res.append((group_lengths[i], syl_length_sum, used_syllables,  x))
 
 
-nums = list(range(11, 21)) + list(range(24, 35))
-fnames = ['CF-0' + str(x) + '_3' for x in nums]
-for fn in fnames:
-    process(fn)
+if not single:
+    nums = list(range(11, 21)) + list(range(24, 35))
+    fnames = ['CF-0' + str(x) + '_3' for x in nums]
+    for fn in fnames:
+        process(fn)
 
 
 # proj = moving_avg_filter(staff_image.projection_rows())
