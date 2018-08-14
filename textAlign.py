@@ -480,7 +480,7 @@ def alignment_fitness(alignment, group_lengths, syl_lengths):
         cur_blob_pos += num_blobs
 
         # weight cost of each alignment element by number of blobs
-        cost += this_cost
+        cost += this_cost * num_blobs
 
     return round(cost / cur_blob_pos)
 
@@ -526,33 +526,47 @@ if __name__ == "__main__":
 
     # set up for sequence searching
     sequences = [[]]
-    max_blob_sequences = 5000  # probably unnecessary but just in case, so nothing gets stuck
-    num_blobs_lookahead = 2
+    max_blob_sequences = 100  # probably unnecessary but just in case, so nothing gets stuck
+    num_blobs_lookahead = 3
+    finished_seqs_counter = 0
 
     def current_position_of_seq(seq):
         return (sum([x[0] for x in seq]), sum([x[1] for x in seq]))
 
     # iterating over blobs
-    for i, gl in enumerate(group_lengths):
-        lookahead_blobs = group_lengths[i:min(i + num_blobs_lookahead, len(group_lengths))]
-        print(lookahead_blobs)
-        print(sequences[0])
+    continue_looping = True
+    while(finished_seqs_counter < len(group_lengths)):
+
+        #print(sequences[0])
 
         new_sequences = []
         # print('group length', gl)
 
         # branch out from every sequence in list of sequences
-        branches = []
+        blob_min_pos = min([sum([x[1] for x in seq]) for seq in sequences])
+        earliest_seqs = []
+        other_seqs = []
+        # earliest_seqs = [seq for seq in sequences if sum([x[1] for x in seq]) == blob_min_pos]
         for seq in sequences:
+            if sum([x[1] for x in seq]) == blob_min_pos:
+                earliest_seqs.append(seq)
+            else:
+                other_seqs.append(seq)
+
+        print('earliest seqs len: ', len(earliest_seqs), len(other_seqs))
+
+        branches = []
+        for seq in earliest_seqs:
 
             # lower bound on number of syllables that could possibly be assigned to this blob?
             min_branches = 0
 
             # max number of branches = branch syllables until reach end of current word
-            pos = current_position_of_seq(seq)[0]
+            pos, blob_pos = current_position_of_seq(seq)
 
-            if pos == len(transcript_string):
+            if pos == len(transcript_string) or blob_pos == len(group_lengths):
                 branches.append(seq)
+                finished_seqs_counter += 1
                 continue
 
             next_words = [x for x in words_begin if x > pos]
@@ -565,7 +579,7 @@ if __name__ == "__main__":
             branches += [seq + [i] for i in iter.product(syl_extensions, blob_extensions)]
 
         print('num branches', len(branches))
-
+        branches += other_seqs
         # filtering step: when two sequences have met the same point (same blob, same syllable), remove the ones with highest cost since they couldn't possibly do any better
 
         sums_and_seqs = [(current_position_of_seq(x), x) for x in branches]
