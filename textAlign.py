@@ -85,7 +85,7 @@ def draw_lines(image, line_locs, horizontal=True):
 
 
 def draw_blob_alignment(alignment_groups, transcript_string,
-                        cc_groups, gamera_image, size=55, fname='testimg.png'):
+                        cc_groups, gamera_image, size=45, fname='testimg.png'):
     '''
     visualizes the alignment given in @alignment_groups.
     '''
@@ -101,19 +101,27 @@ def draw_blob_alignment(alignment_groups, transcript_string,
         used_syllables_indices = list(range(cur_syl_index, end_syl_index))
         cur_syl_index = end_syl_index
         used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
-        used_syllables = str(alignment_groups[i]) + " " + used_syllables
+        # used_syllables = str(alignment_groups[i][1]) + " " + used_syllables
 
         end_blob_index = cur_blob_index + alignment_groups[i][1]
         used_blob_indices = list(range(cur_blob_index, end_blob_index))
         cur_blob_index = end_blob_index
         used_blobs = [cc_groups[j] for j in used_blob_indices]
 
-        ul, lr = bounding_box(used_blobs[0])
-        position = (ul.x, ul.y - size)
-        draw.text(position, used_syllables, fill='rgb(0, 0, 0)', font=font)
-
-        for blob in used_blobs:
+        for j, blob in enumerate(used_blobs):
             ul, lr = bounding_box(blob)
+            position = (ul.x, ul.y - size)
+
+            if j == 0:
+                text = used_syllables if used_syllables else '(null)'
+                text = str(alignment_groups[i][1]) + " " + text
+            elif j == len(used_blobs) - 1:
+                text = '->'
+            else:
+                text = '-'
+            draw.text(position, text, fill='rgb(0, 0, 0)', font=font)
+
+            # draw rectangle around this blob
             draw.rectangle((ul.x, ul.y, lr.x, lr.y), outline='rgb(0, 0, 0)')
 
     image.save(fname)
@@ -487,7 +495,7 @@ def alignment_fitness(alignment, group_lengths, syl_lengths):
 
 if __name__ == "__main__":
     single = True
-    filename = 'CF-024_3'
+    filename = 'CF-011_3'
     # def process(filename):
     print('processing ' + filename + '...')
 
@@ -525,25 +533,29 @@ if __name__ == "__main__":
         syl_lengths.append(this_width)
 
     # set up for sequence searching
-    sequences = [[]]
-    max_blob_sequences = 100  # probably unnecessary but just in case, so nothing gets stuck
+
+    max_blob_sequences = 1000  # probably unnecessary but just in case, so nothing gets stuck
     num_blobs_lookahead = 3
-    finished_seqs_counter = 0
+    first_word_begin = [x for x in words_begin if x > 0][0]
+    init_seqs = iter.product(range(0, first_word_begin + 1), range(1, num_blobs_lookahead + 1))
+    sequences = [[x] for x in init_seqs]
+    finished_seqs = []
 
     def current_position_of_seq(seq):
         return (sum([x[0] for x in seq]), sum([x[1] for x in seq]))
 
     # iterating over blobs
     continue_looping = True
-    while(finished_seqs_counter < len(group_lengths)):
+    while(sequences):
 
-        #print(sequences[0])
+        # print(sequences[0])
 
         new_sequences = []
         # print('group length', gl)
 
         # branch out from every sequence in list of sequences
         blob_min_pos = min([sum([x[1] for x in seq]) for seq in sequences])
+        print('min blob position', blob_min_pos)
         earliest_seqs = []
         other_seqs = []
         # earliest_seqs = [seq for seq in sequences if sum([x[1] for x in seq]) == blob_min_pos]
@@ -553,7 +565,7 @@ if __name__ == "__main__":
             else:
                 other_seqs.append(seq)
 
-        print('earliest seqs len: ', len(earliest_seqs), len(other_seqs))
+        print('earliest seqs len', len(earliest_seqs), 'vs', len(other_seqs))
 
         branches = []
         for seq in earliest_seqs:
@@ -565,16 +577,17 @@ if __name__ == "__main__":
             pos, blob_pos = current_position_of_seq(seq)
 
             if pos == len(transcript_string) or blob_pos == len(group_lengths):
-                branches.append(seq)
-                finished_seqs_counter += 1
+                finished_seqs.append((alignment_fitness(seq, group_lengths, syl_lengths), seq))
                 continue
 
             next_words = [x for x in words_begin if x > pos]
             next_word_start = next_words[0] if next_words else len(transcript_string)
-            max_branches = next_word_start - pos + 1
+            max_branches = next_word_start - pos
 
-            syl_extensions = list(range(min_branches, max_branches))
-            blob_extensions = range(1, num_blobs_lookahead)
+            syl_extensions = range(min_branches, max_branches + 1)
+
+            max_blobs = min(num_blobs_lookahead, len(group_lengths) - blob_pos)
+            blob_extensions = range(1, max_blobs + 1)
 
             branches += [seq + [i] for i in iter.product(syl_extensions, blob_extensions)]
 
@@ -593,17 +606,20 @@ if __name__ == "__main__":
 
         # after previous for loop new_sequences still has a cost associated with each sequence
         # remove all but the least costly sequences
-        # print('len new sequences', len(new_sequences))
+        print('len new sequences', len(new_sequences))
+        print('finished seqs', len(finished_seqs))
         new_sequences.sort(key=lambda x: x[0])
 
         sequences = [x[1] for x in new_sequences][:max_blob_sequences]
 
-        # print("----")
+        print("----")
+
+    finished_seqs.sort(key=lambda x: x[0])
 
     res = []
     syl_pos = 0
     blob_pos = 0
-    for i, x in enumerate(sequences[0]):
+    for i, x in enumerate(finished_seqs[0][1]):
         end_syl_index = syl_pos + x[0]
         used_syllables_indices = list(range(syl_pos, end_syl_index))
         syl_pos = end_syl_index
@@ -616,7 +632,7 @@ if __name__ == "__main__":
         used_blobs = '-'.join([str(group_lengths[j]) for j in used_blob_indices])
         res.append((used_blobs, used_syllables, syl_length_sum, x))
 
-    draw_blob_alignment(sequences[0], transcript_string, cc_groups,
+    draw_blob_alignment(finished_seqs[0][1], transcript_string, cc_groups,
                         image, fname="testimg " + filename + ".png")
 
 if not single:
