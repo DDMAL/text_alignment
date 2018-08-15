@@ -469,7 +469,7 @@ def parse_transcript(filename, syllables=False):
     return lines, words_begin
 
 
-def alignment_fitness(alignment, group_lengths, syl_lengths):
+def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
     '''
     given an alignment between text blobs on the manuscript and syllables of the transcript,
     computes the error of the alignment based on the estimated syllable lengths and the known
@@ -484,11 +484,11 @@ def alignment_fitness(alignment, group_lengths, syl_lengths):
 
         new_sum = sum(syl_lengths[cur_syl_pos:cur_syl_pos + num_syls])
         cur_syl_pos += num_syls
-        this_cost = (new_sum - sum(group_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
+        this_cost = (new_sum - sum(blob_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
         cur_blob_pos += num_blobs
 
         # weight cost of each alignment element by number of blobs
-        cost += this_cost * num_blobs
+        cost += this_cost * (num_blobs ** 2)
 
     return round(cost / cur_blob_pos)
 
@@ -506,24 +506,25 @@ if __name__ == "__main__":
 
     cc_lines = find_ccs_under_staves(cc_lines, staff_image)
 
+    gap_sizes = []
     cc_groups = []
     for x in cc_lines:
-        grouped, gap_sizes = group_ccs(x)
-        print(gap_sizes)
+        grouped, gaps = group_ccs(x)
+        gap_sizes += gaps + [np.inf]
         cc_groups += grouped
 
-    group_lengths = []
+    blob_lengths = []
     for g in cc_groups:
         width = sum([x.ncols for x in g])
-        group_lengths.append(width)
+        blob_lengths.append(width)
 
     transcript_string, words_begin = latinSyllabification.parse_transcript(
             './png/' + filename + '.txt')
     transcript_lengths = [len(x) for x in transcript_string]
 
     # estimate length of each syllable
-    avg_char_length = round(sum(group_lengths) / sum(transcript_lengths))
-    avg_syl_length = round(sum(group_lengths) / len(group_lengths))
+    avg_char_length = round(sum(blob_lengths) / sum(transcript_lengths))
+    avg_syl_length = round(sum(blob_lengths) / len(blob_lengths))
     syl_lengths = []
     letter_dict = defaultdict(lambda: avg_char_length, **letter_width_dict)
     for syl in transcript_string:
@@ -576,8 +577,8 @@ if __name__ == "__main__":
             # max number of branches = branch syllables until reach end of current word
             pos, blob_pos = current_position_of_seq(seq)
 
-            if pos == len(transcript_string) or blob_pos == len(group_lengths):
-                finished_seqs.append((alignment_fitness(seq, group_lengths, syl_lengths), seq))
+            if pos == len(transcript_string) or blob_pos == len(blob_lengths):
+                finished_seqs.append((alignment_fitness(seq, blob_lengths, syl_lengths, gap_sizes), seq))
                 continue
 
             next_words = [x for x in words_begin if x > pos]
@@ -586,7 +587,7 @@ if __name__ == "__main__":
 
             syl_extensions = range(min_branches, max_branches + 1)
 
-            max_blobs = min(num_blobs_lookahead, len(group_lengths) - blob_pos)
+            max_blobs = min(num_blobs_lookahead, len(blob_lengths) - blob_pos)
             blob_extensions = range(1, max_blobs + 1)
 
             branches += [seq + [i] for i in iter.product(syl_extensions, blob_extensions)]
@@ -600,7 +601,7 @@ if __name__ == "__main__":
 
         for key, group in iter.groupby(sums_and_seqs, lambda x: x[0]):
             group = [x[1] for x in group]
-            scores = [(alignment_fitness(x, group_lengths, syl_lengths), x) for x in group]
+            scores = [(alignment_fitness(x, blob_lengths, syl_lengths, gap_sizes), x) for x in group]
             best_group_member = min(scores, key=lambda x: x[0])
             new_sequences.append(best_group_member)
 
@@ -629,7 +630,7 @@ if __name__ == "__main__":
         end_blob_index = blob_pos + x[1]
         used_blob_indices = list(range(blob_pos, end_blob_index))
         blob_pos = end_blob_index
-        used_blobs = '-'.join([str(group_lengths[j]) for j in used_blob_indices])
+        used_blobs = '-'.join([str(blob_lengths[j]) for j in used_blob_indices])
         res.append((used_blobs, used_syllables, syl_length_sum, x))
 
     draw_blob_alignment(finished_seqs[0][1], transcript_string, cc_groups,
