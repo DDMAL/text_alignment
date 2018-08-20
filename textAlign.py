@@ -153,7 +153,8 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
 
 if __name__ == "__main__":
     single = True
-    filename = 'salzinnes_24'
+    # filename = 'salzinnes_24'
+    filename = 'einsiedeln_001r'
     # def process(filename):
     print('processing ' + filename + '...')
 
@@ -161,7 +162,7 @@ if __name__ == "__main__":
     staff_image = gc.load_image('./png/' + filename + '_stafflines.png')
     image, staff_image = preproc.preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
-    cc_lines = preproc. find_ccs_under_staves(cc_lines, staff_image)
+    cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
 
     gap_sizes = []
     cc_groups = []
@@ -294,7 +295,19 @@ if __name__ == "__main__":
     draw_blob_alignment(finished_seqs[0][1], transcript_string, cc_groups,
                         image, fname="testimg " + filename + ".png")
 
-    imsv(draw_lines(image, lines_peak_locs), fname="testimg " + filename + " hlines.png")
+    # draw lines representing cc_lines groupings
+    col_image = image.image_copy().add_images(staff_image)
+    col_image = col_image.to_rgb()
+    for line in cc_lines:
+        red = np.random.randint(0, 255)
+        grn = np.random.randint(0, 255)
+        blu = np.random.randint(0, 255)
+        for cc in line:
+            col_image.draw_hollow_rect(cc.ul, cc.lr, gc.RGBPixel(red, grn, blu), 5)
+
+
+    # draw lines representing horizontal projection peaks
+    imsv(draw_lines(col_image, lines_peak_locs), fname="testimg " + filename + " hlines.png")
 
 # if not single:
 #     nums = list(range(11, 21)) + list(range(24, 35))

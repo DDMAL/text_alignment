@@ -22,7 +22,7 @@ collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when cl
 remove_capitals_scale = 2
 
 # CC GROUPING (BLOBS)
-cc_group_gap_min = 10  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 25  # any gap at least this wide will be assumed to be a space between words!
 
 
 def vertically_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
