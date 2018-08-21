@@ -150,6 +150,9 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
         this_cost = (new_sum - sum(blob_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
         this_cost += sum(covered_gaps) ** 2
 
+        if num_syls == 0:
+            this_cost *= 50
+
         cost += this_cost
 
         # update current position in sequence
@@ -162,8 +165,7 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
 if __name__ == "__main__":
     single = True
     # filename = 'salzinnes_24'
-    filename = 'einsiedeln_002r'
-
+    filename = 'einsiedeln_002v'
 
     # def process(filename):
     print('processing ' + filename + '...')

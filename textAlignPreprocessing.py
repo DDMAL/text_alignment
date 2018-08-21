@@ -19,10 +19,11 @@ noise_area_thresh = 600        # an int in : ignore ccs with area smaller than t
 filter_size = 20                # size of moving-average filter used to smooth projection
 prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
 collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-remove_capitals_scale = 2
+remove_capitals_scale = 70
 
 # CC GROUPING (BLOBS)
 cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
+max_distance_to_staff = 200
 
 
 def vertically_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
@@ -232,8 +233,7 @@ def identify_text_lines(image_bin):
     return cc_lines, peak_locations
 
 
-def find_ccs_under_staves(cc_lines, staff_image,
-            min_line_length_scale=0.2, max_distance_to_staff=199):
+def find_ccs_under_staves(cc_lines, staff_image, max_distance_to_staff=max_distance_to_staff):
     '''
     actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria
     '''
