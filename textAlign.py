@@ -16,29 +16,32 @@ reload(latinSyllabification)
 reload(preproc)
 
 # PARAMETERS FOR PREPROCESSING
-saturation_thresh = 0.6
-sat_area_thresh = 150
-despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 600        # an int in : ignore ccs with area smaller than this
+# saturation_thresh = 0.6
+# sat_area_thresh = 150
+# despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
+# noise_area_thresh = 600        # an int in : ignore ccs with area smaller than this
+#
+# # PARAMETERS FOR TEXT LINE SEGMENTATION
+# filter_size = 20                # size of moving-average filter used to smooth projection
+# prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
+# collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
+# remove_capitals_scale = 2
+#
+# # CC GROUPING (BLOBS)
+# cc_group_gap_min = 10  # any gap at least this wide will be assumed to be a space between words!
 
-# PARAMETERS FOR TEXT LINE SEGMENTATION
-filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
-collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-remove_capitals_scale = 2
-
-# CC GROUPING (BLOBS)
-cc_group_gap_min = 10  # any gap at least this wide will be assumed to be a space between words!
+max_blob_sequences = 2000  # so nothing gets stuck
+num_blobs_lookahead = 3
 
 letter_width_dict = {
     '*': 20,
-    'm': 128,
-    'l': 36,
-    'i': 36,
-    'a': 84,
-    'c': 60,
-    'e': 59,
-}
+#     'm': 128,
+#     'l': 36,
+#     'i': 36,
+#     'a': 84,
+#     'c': 60,
+#     'e': 59,
+ }
 
 
 def bounding_box(cc_list):
@@ -140,13 +143,18 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
         num_syls = x[0]
         num_blobs = x[1]
 
-        new_sum = sum(syl_lengths[cur_syl_pos:cur_syl_pos + num_syls])
-        cur_syl_pos += num_syls
-        this_cost = (new_sum - sum(blob_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
-        cur_blob_pos += num_blobs
+        # weight cost of each alignment element by space between blobs used, if more than one blob
+        covered_gaps = [gap_sizes[i] for i in range(cur_blob_pos, cur_blob_pos + num_blobs - 1)]
 
-        # weight cost of each alignment element by number of blobs
-        cost += this_cost * (num_blobs ** 2)
+        new_sum = sum(syl_lengths[cur_syl_pos:cur_syl_pos + num_syls])
+        this_cost = (new_sum - sum(blob_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
+        this_cost += sum(covered_gaps) ** 2
+
+        cost += this_cost
+
+        # update current position in sequence
+        cur_syl_pos += num_syls
+        cur_blob_pos += num_blobs
 
     return round(cost / cur_blob_pos)
 
@@ -154,7 +162,9 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
 if __name__ == "__main__":
     single = True
     # filename = 'salzinnes_24'
-    filename = 'einsiedeln_001r'
+    filename = 'einsiedeln_002r'
+
+
     # def process(filename):
     print('processing ' + filename + '...')
 
@@ -193,9 +203,6 @@ if __name__ == "__main__":
         syl_lengths.append(this_width)
 
     # set up for sequence searching
-
-    max_blob_sequences = 1000  # probably unnecessary but just in case, so nothing gets stuck
-    num_blobs_lookahead = 3
     first_word_begin = [x for x in words_begin if x > 0][0]
     init_seqs = iter.product(range(0, first_word_begin + 1), range(1, num_blobs_lookahead + 1))
     sequences = [[x] for x in init_seqs]
@@ -208,7 +215,7 @@ if __name__ == "__main__":
     continue_looping = True
     while(sequences):
 
-        # print(sequences[0])
+        print(sequences[0])
 
         new_sequences = []
         # print('group length', gl)
@@ -237,7 +244,8 @@ if __name__ == "__main__":
             pos, blob_pos = current_position_of_seq(seq)
 
             if pos == len(transcript_string) or blob_pos == len(blob_lengths):
-                finished_seqs.append((alignment_fitness(seq, blob_lengths, syl_lengths, gap_sizes), seq))
+                this_fitness = alignment_fitness(seq, blob_lengths, syl_lengths, gap_sizes)
+                finished_seqs.append((this_fitness, seq))
                 continue
 
             next_words = [x for x in words_begin if x > pos]
@@ -291,6 +299,7 @@ if __name__ == "__main__":
         blob_pos = end_blob_index
         used_blobs = '-'.join([str(blob_lengths[j]) for j in used_blob_indices])
         res.append((used_blobs, used_syllables, syl_length_sum, x))
+    print(res)
 
     draw_blob_alignment(finished_seqs[0][1], transcript_string, cc_groups,
                         image, fname="testimg " + filename + ".png")
@@ -304,7 +313,6 @@ if __name__ == "__main__":
         blu = np.random.randint(0, 255)
         for cc in line:
             col_image.draw_hollow_rect(cc.ul, cc.lr, gc.RGBPixel(red, grn, blu), 5)
-
 
     # draw lines representing horizontal projection peaks
     imsv(draw_lines(col_image, lines_peak_locs), fname="testimg " + filename + " hlines.png")

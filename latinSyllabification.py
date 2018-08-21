@@ -1,7 +1,7 @@
 import re
 
 consonant_groups = ['qu', 'fl', 'fr', 'st', 'br', 'cr', 'pr', 'tr', 'ct', 'th']
-dipthongs = ['iu', 'au', 'io', 'ihe', 'oe', 'ua', 'ui', 'uo']
+dipthongs = ['au', 'io', 'ihe', 'oe', 'ua', 'ui', 'uo']
 vowels = ['a', 'e', 'i', 'o', 'u']
 
 

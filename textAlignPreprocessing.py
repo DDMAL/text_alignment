@@ -22,7 +22,7 @@ collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when cl
 remove_capitals_scale = 2
 
 # CC GROUPING (BLOBS)
-cc_group_gap_min = 25  # any gap at least this wide will be assumed to be a space between words!
+cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
 
 
 def vertically_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
@@ -162,7 +162,7 @@ def preprocess_images(input_image, staff_image,
     for i in range(filter_runs):
         image_bin.filter_short_runs(5, 'black')
         image_bin.filter_narrow_runs(5, 'black')
-        staff_image.filter_narrow_runs(50, 'white')
+        staff_image.filter_narrow_runs(400, 'white')
     staff_image.despeckle(despeckle_amt)
 
     return image_bin, staff_image
