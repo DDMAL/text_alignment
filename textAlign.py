@@ -30,11 +30,11 @@ reload(preproc)
 # # CC GROUPING (BLOBS)
 # cc_group_gap_min = 10  # any gap at least this wide will be assumed to be a space between words!
 
-max_blob_sequences = 2000  # so nothing gets stuck
+max_blob_sequences = 1000  # so nothing gets stuck
 num_blobs_lookahead = 3
 
 letter_width_dict = {
-    '*': 20,
+    '*': 2,
 #     'm': 128,
 #     'l': 36,
 #     'i': 36,
@@ -150,9 +150,6 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
         this_cost = (new_sum - sum(blob_lengths[cur_blob_pos:cur_blob_pos + num_blobs])) ** 2
         this_cost += sum(covered_gaps) ** 2
 
-        if num_syls == 0:
-            this_cost *= 50
-
         cost += this_cost
 
         # update current position in sequence
@@ -165,13 +162,19 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
 if __name__ == "__main__":
     single = True
     # filename = 'salzinnes_24'
-    filename = 'einsiedeln_002v'
+    # filename = 'einsiedeln_002v'
+    filename = 'stgall390_07'
 
     # def process(filename):
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '_text.png')
-    staff_image = gc.load_image('./png/' + filename + '_stafflines.png')
+    try:
+        staff_image = gc.load_image('./png/' + filename + '_stafflines.png')
+    except IOError:
+        staff_image = None
+        print('no stafflines image...')
+
     image, staff_image = preproc.preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
     cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
@@ -307,7 +310,9 @@ if __name__ == "__main__":
                         image, fname="testimg " + filename + ".png")
 
     # draw lines representing cc_lines groupings
-    col_image = image.image_copy().add_images(staff_image)
+    col_image = image.image_copy()
+    if staff_image:
+        col_image = col_image.add_images(staff_image)
     col_image = col_image.to_rgb()
     for line in cc_lines:
         red = np.random.randint(0, 255)

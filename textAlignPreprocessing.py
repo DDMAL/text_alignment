@@ -10,10 +10,10 @@ import os
 import re
 
 # PARAMETERS FOR PREPROCESSING
-saturation_thresh = 0.6
+saturation_thresh = 0.5
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 600        # an int in : ignore ccs with area smaller than this
+noise_area_thresh = 200        # an int in : ignore ccs with area smaller than this
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
@@ -135,13 +135,12 @@ def moving_avg_filter(data, filter_size=filter_size):
     return smoothed
 
 
-def preprocess_images(input_image, staff_image,
+def preprocess_images(input_image, staff_image=None,
                     sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
-                    despeckle_amt=despeckle_amt, filter_runs=10):
+                    despeckle_amt=despeckle_amt, filter_runs=10, filter_runs_amt=5):
 
     image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
     image_bin = input_image.to_onebit().subtract_images(image_sats)
-    staff_image = staff_image.to_onebit()
 
     # keep only colored ccs above a certain size
     ccs = image_bin.cc_analysis()
@@ -159,12 +158,16 @@ def preprocess_images(input_image, staff_image,
     # find likely rotation angle and correct
     angle, tmp = image_bin.rotation_angle_projections()
     image_bin = image_bin.rotate(angle=angle)
-    staff_image = staff_image.rotate(angle=angle)
+
     for i in range(filter_runs):
-        image_bin.filter_short_runs(5, 'black')
-        image_bin.filter_narrow_runs(5, 'black')
+        image_bin.filter_short_runs(filter_runs_amt, 'black')
+        image_bin.filter_narrow_runs(filter_runs_amt, 'black')
+
+    if staff_image:
+        staff_image = staff_image.to_onebit()
+        staff_image = staff_image.rotate(angle=angle)
+        staff_image.despeckle(despeckle_amt)
         staff_image.filter_narrow_runs(400, 'white')
-    staff_image.despeckle(despeckle_amt)
 
     return image_bin, staff_image
 
@@ -233,10 +236,13 @@ def identify_text_lines(image_bin):
     return cc_lines, peak_locations
 
 
-def find_ccs_under_staves(cc_lines, staff_image, max_distance_to_staff=max_distance_to_staff):
+def find_ccs_under_staves(cc_lines, staff_image=None, max_distance_to_staff=max_distance_to_staff):
     '''
     actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria
     '''
+
+    if not staff_image:
+        return cc_lines
 
     proj = moving_avg_filter(staff_image.projection_rows())
     staff_peaks = find_peak_locations(proj)
