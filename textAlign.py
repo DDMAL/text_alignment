@@ -185,21 +185,27 @@ def gap_align_fitness(gaps, syllables, line_projs):
 
     for i in range(len(gaps)):
         factor = 1
-        cur_gap = gaps[i]
 
-        # first, a gap, then a syllable, and repeat. gaps should be 0, syllables should be 1
+        # check if the next gap will cross a line break - encourage that!
+        cur_gap = gaps[i]
+        if any([position < x < position + cur_gap for x in line_break_positions]):
+            print('gap -> line break')
+            factor /= 1000
         gap_contains = line_projs_flat[position:position + cur_gap]
         position += cur_gap
 
+        # check if the next syllable will cross a line break - can't have that!
         cur_syl = syllables[i].width
         if any([position < x < position + cur_syl for x in line_break_positions]):
-            factor += 1000
-
+            print('syl -> line break')
+            factor *= 1000
         syl_contains = line_projs_flat[position:position + cur_syl]
         position += cur_syl
 
         cost += sum([x * x for x in gap_contains]) * factor
         cost += sum([(1 - x) * (1 - x) for x in syl_contains]) * factor
+
+        print(position)
 
     return cost
 
@@ -251,6 +257,9 @@ if __name__ == '__main__':
             word_begin=words_begin[i],
             width=width)
             )
+
+    test_gaps = np.random.randint(1, 10000, len(syllables))
+    gap_align_fitness(test_gaps, syllables, line_projs)
 
 
 def older_method():
