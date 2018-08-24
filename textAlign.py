@@ -9,6 +9,7 @@ import latinSyllabification
 import textAlignPreprocessing as preproc
 from os.path import isfile, join
 import numpy as np
+from syllable import Syllable
 import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
@@ -172,8 +173,47 @@ def normalize_projection(strip):
     return clipped
 
 
-if __name__ == "__main__":
-    single = True
+if __name__ == '__main__':
+    # filename = 'salzinnes_24'
+    # filename = 'einsiedeln_002v'
+    # filename = 'stgall390_07'
+    filename = 'klosterneuburg_23v'
+
+    # def process(filename):
+    print('processing ' + filename + '...')
+
+    raw_image = gc.load_image('./png/' + filename + '_text.png')
+    try:
+        staff_image = gc.load_image('./png/' + filename + '_stafflines.png')
+    except IOError:
+        staff_image = None
+        print('no stafflines image...')
+
+    image, staff_image = preproc.preprocess_images(raw_image, staff_image)
+    cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
+    cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
+    cc_strips = [union_images(line) for line in cc_lines]
+    line_projs = [normalize_projection(x) for x in cc_strips]
+
+    # transcript_string contains each syllable. words_begin is 1 for every syllable that begins a
+    # word and 0 for every syllable that does not
+    transcript_string, words_begin = latinSyllabification.parse_transcript(
+            './png/' + filename + '_transcript.txt')
+
+    total_num_letters = sum([len(x) for x in transcript_string])
+
+    # estimate width and volume of a single letter on average
+    cc_lines_flat = [item for sublist in cc_lines for item in sublist]
+    total_black = 0
+    total_width = 0
+    for cc in cc_lines_flat:
+        total_width += cc.ncols
+        total_black += cc.black_area()[0]
+
+    avg_letter_width = total_width / total_num_letters
+
+
+def older_method():
     # filename = 'salzinnes_24'
     # filename = 'einsiedeln_002v'
     # filename = 'stgall390_07'

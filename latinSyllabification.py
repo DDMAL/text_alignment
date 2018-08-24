@@ -88,11 +88,18 @@ def parse_transcript(filename, syllabify=True):
     text = re.compile('[-]').split(text)
 
     words_begin = []
-    words_begin.append(0)
+    # words_begin.append(0)
+    # for i, x in enumerate(text):
+    #     if x[0] == ' ':
+    #         text[i] = text[i][1:]
+    #         words_begin.append(i)
+
     for i, x in enumerate(text):
         if x[0] == ' ':
             text[i] = text[i][1:]
-            words_begin.append(i)
+            words_begin.append(1)
+        else:
+            words_begin.append(0)
 
     return text, words_begin
 
