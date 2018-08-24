@@ -159,11 +159,25 @@ def alignment_fitness(alignment, blob_lengths, syl_lengths, gap_sizes):
     return round(cost / cur_blob_pos)
 
 
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def normalize_projection(strip):
+    proj = strip.projection_cols()
+    med = np.median([x for x in proj if x > 1])
+    clipped = np.clip(proj * 2, 0, med)
+    max_clip = max(clipped)
+    clipped = [x / max_clip for x in clipped]
+    return clipped
+
+
 if __name__ == "__main__":
     single = True
     # filename = 'salzinnes_24'
     # filename = 'einsiedeln_002v'
-    filename = 'stgall390_07'
+    # filename = 'stgall390_07'
+    filename = 'klosterneuburg_23v'
 
     # def process(filename):
     print('processing ' + filename + '...')
@@ -178,6 +192,8 @@ if __name__ == "__main__":
     image, staff_image = preproc.preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
     cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
+    cc_strips = [union_images(line) for line in cc_lines]
+    line_projs = [normalize_projection(x) for x in cc_strips]
 
     gap_sizes = []
     cc_groups = []
