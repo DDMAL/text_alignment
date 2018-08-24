@@ -4,3 +4,6 @@ class Syllable(object):
         self.text = text
         self.width = width
         self.word_begin = word_begin
+
+    def __repr__(self):
+        return str(self.__dict__)

@@ -9,12 +9,13 @@ import latinSyllabification
 import textAlignPreprocessing as preproc
 from os.path import isfile, join
 import numpy as np
-from syllable import Syllable
+import syllable as syl
 import PIL as pil  # python imaging library, for testing only
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 reload(latinSyllabification)
 reload(preproc)
+reload(syl)
 
 # PARAMETERS FOR PREPROCESSING
 # saturation_thresh = 0.6
@@ -173,6 +174,36 @@ def normalize_projection(strip):
     return clipped
 
 
+def gap_align_fitness(gaps, syllables, line_projs):
+    line_projs_flat = [item for sublist in line_projs for item in sublist]
+
+    proj_lens = [len(x) for x in line_projs]
+    line_break_positions = [sum(proj_lens[:x]) for x in range(len(proj_lens))]
+
+    cost = 0
+    position = 0
+
+    for i in range(len(gaps)):
+        factor = 1
+        cur_gap = gaps[i]
+
+        # first, a gap, then a syllable, and repeat. gaps should be 0, syllables should be 1
+        gap_contains = line_projs_flat[position:position + cur_gap]
+        position += cur_gap
+
+        cur_syl = syllables[i].width
+        if any([position < x < position + cur_syl for x in line_break_positions]):
+            factor += 1000
+
+        syl_contains = line_projs_flat[position:position + cur_syl]
+        position += cur_syl
+
+        cost += sum([x * x for x in gap_contains]) * factor
+        cost += sum([(1 - x) * (1 - x) for x in syl_contains]) * factor
+
+    return cost
+
+
 if __name__ == '__main__':
     # filename = 'salzinnes_24'
     # filename = 'einsiedeln_002v'
@@ -210,7 +241,16 @@ if __name__ == '__main__':
         total_width += cc.ncols
         total_black += cc.black_area()[0]
 
-    avg_letter_width = total_width / total_num_letters
+    avg_char_length = total_width / total_num_letters
+
+    syllables = []
+    for i in range(len(transcript_string)):
+        width = avg_char_length * len(transcript_string[i])
+        syllables.append(syl.Syllable(
+            text=transcript_string[i],
+            word_begin=words_begin[i],
+            width=width)
+            )
 
 
 def older_method():
@@ -379,9 +419,3 @@ def older_method():
 
     # draw lines representing horizontal projection peaks
     imsv(draw_lines(col_image, lines_peak_locs), fname="testimg " + filename + " hlines.png")
-
-# if not single:
-#     nums = list(range(11, 21)) + list(range(24, 35))
-#     fnames = ['CF-0' + str(x) + '_3' for x in nums]
-#     for fn in fnames:
-#         process(fn)
