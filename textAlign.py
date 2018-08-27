@@ -168,13 +168,19 @@ def sigmoid(x):
 def normalize_projection(strip):
     proj = strip.projection_cols()
     med = np.median([x for x in proj if x > 1])
-    clipped = np.clip(proj * 2, 0, med)
+    clipped = np.clip(proj, 0, med)
     max_clip = max(clipped)
     clipped = [x / max_clip for x in clipped]
     return clipped
 
 
 def gap_align_fitness(gaps, syllables, line_projs):
+    # from syl_starts, get gaps between syls
+    # gaps = [syl_starts[i + 1] - syl_starts[i] for i in range(len(syl_starts) - 1)]
+    # gaps = [syl_starts[0]] + gaps
+    # gaps = [gaps[i] - syllables[i].width for i in range(len(gaps))]
+    # print(gaps)
+
     line_projs_flat = [item for sublist in line_projs for item in sublist]
 
     proj_lens = [len(x) for x in line_projs]
@@ -206,8 +212,41 @@ def gap_align_fitness(gaps, syllables, line_projs):
         cost += sum([(1 - x) * (1 - x) for x in syl_contains]) * factor
 
         print(position)
+        if position >= len(line_projs_flat):
+            print('gaps wider than projections')
+            remaining_gaps = gaps[i:]
+            remaining_syls = [x.width for x in syllables[i:]]
+            cost += sum(remaining_gaps) + sum(remaining_syls)
+            break
 
     return cost
+
+
+def absolute_to_relative_pos(position, strip_lengths):
+    for i in range(len(strip_lengths)):
+        if position > strip_lengths[i]:
+            position -= strip_lengths[i]
+        else:
+            return i, position
+    raise ValueError('Given position larger than sum of strip lengths (out of bounds.)')
+
+def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=50):
+
+    strip_lengths = [x.ncols for x in cc_strips]
+
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+
+    # from current position of projection, find position on page
+    position = 0
+    for i in range(len(syllables)):
+        start_pos = position + gaps[i]
+        end_pos = start_pos + syllables[i].width
+
+
+    return
 
 
 if __name__ == '__main__':
@@ -258,8 +297,8 @@ if __name__ == '__main__':
             width=width)
             )
 
-    test_gaps = np.random.randint(1, 10000, len(syllables))
-    gap_align_fitness(test_gaps, syllables, line_projs)
+    test_gaps = np.random.randint(1, 20, len(syllables))
+    res = gap_align_fitness(test_gaps, syllables, line_projs)
 
 
 def older_method():
