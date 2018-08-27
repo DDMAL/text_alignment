@@ -228,9 +228,11 @@ def absolute_to_relative_pos(position, strip_lengths):
             position -= strip_lengths[i]
         else:
             return i, position
-    raise ValueError('Given position larger than sum of strip lengths (out of bounds.)')
+    print('Given position larger than sum of strip lengths (out of bounds.)')
+    return i, strip_lengths[-1]
 
-def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=50):
+
+def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=30):
 
     strip_lengths = [x.ncols for x in cc_strips]
 
@@ -245,9 +247,24 @@ def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=50
         start_pos = position + gaps[i]
         end_pos = start_pos + syllables[i].width
 
+        start_line, rel_start_pos = absolute_to_relative_pos(start_pos, strip_lengths)
+        end_line, rel_end_pos = absolute_to_relative_pos(end_pos, strip_lengths)
 
+        rel_start_pos += cc_strips[start_line].offset_x
+        rel_end_pos += cc_strips[end_line].offset_x
+
+        start_pt = (rel_start_pos, cc_strips[start_line].offset_y)
+        end_pt = (rel_end_pos, cc_strips[end_line].offset_y)
+
+        draw.line([start_pt, end_pt], fill='rgb(0, 0, 0)', width=5)
+        # draw.text(start_pt, syllables[i].text, fill='rgb(0, 0, 0)', font=font)
+        position = end_pos
+
+    image.save(fname)
     return
 
+
+char_estimate_scale = 0.7
 
 if __name__ == '__main__':
     # filename = 'salzinnes_24'
@@ -286,7 +303,7 @@ if __name__ == '__main__':
         total_width += cc.ncols
         total_black += cc.black_area()[0]
 
-    avg_char_length = total_width / total_num_letters
+    avg_char_length = int((total_width / total_num_letters) * char_estimate_scale)
 
     syllables = []
     for i in range(len(transcript_string)):
@@ -297,8 +314,16 @@ if __name__ == '__main__':
             width=width)
             )
 
-    test_gaps = np.random.randint(1, 20, len(syllables))
+    room_for_gaps = sum([x.ncols for x in cc_strips]) - int(total_width * char_estimate_scale)
+    test_gaps = np.random.exponential(1.0, len(syllables))
+    test_gaps = [int(x * room_for_gaps / sum(test_gaps)) for x in test_gaps]
+
     res = gap_align_fitness(test_gaps, syllables, line_projs)
+    print(res)
+    visualize_gap_align(test_gaps, syllables, image, cc_strips, 'testalign.png')
+
+
+
 
 
 def older_method():
