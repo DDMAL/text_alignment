@@ -3,6 +3,8 @@ gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
 import itertools as iter
+import functools
+import alignmentGA
 import os
 import re
 import latinSyllabification
@@ -16,6 +18,7 @@ from collections import defaultdict
 reload(latinSyllabification)
 reload(preproc)
 reload(syl)
+reload(alignmentGA)
 
 # PARAMETERS FOR PREPROCESSING
 # saturation_thresh = 0.6
@@ -174,7 +177,7 @@ def normalize_projection(strip):
     return clipped
 
 
-def gap_align_fitness(gaps, syllables, line_projs):
+def gap_align_fitness(gaps, syllables, line_projs, verbose=False):
     # from syl_starts, get gaps between syls
     # gaps = [syl_starts[i + 1] - syl_starts[i] for i in range(len(syl_starts) - 1)]
     # gaps = [syl_starts[0]] + gaps
@@ -195,31 +198,35 @@ def gap_align_fitness(gaps, syllables, line_projs):
         # check if the next gap will cross a line break - encourage that!
         cur_gap = gaps[i]
         if any([position < x < position + cur_gap for x in line_break_positions]):
-            print('gap -> line break')
-            factor /= 1000
+            # print('gap -> line break')
+            factor /= 2
         gap_contains = line_projs_flat[position:position + cur_gap]
         position += cur_gap
 
         # check if the next syllable will cross a line break - can't have that!
         cur_syl = syllables[i].width
         if any([position < x < position + cur_syl for x in line_break_positions]):
-            print('syl -> line break')
-            factor *= 1000
+            # print('syl -> line break')
+            factor *= 10
         syl_contains = line_projs_flat[position:position + cur_syl]
         position += cur_syl
 
         cost += sum([x * x for x in gap_contains]) * factor
         cost += sum([(1 - x) * (1 - x) for x in syl_contains]) * factor
 
-        print(position)
         if position >= len(line_projs_flat):
-            print('gaps wider than projections')
+            # print('gaps wider than projections')
             remaining_gaps = gaps[i:]
             remaining_syls = [x.width for x in syllables[i:]]
-            cost += sum(remaining_gaps) + sum(remaining_syls)
+            cost += (sum(remaining_gaps) + sum(remaining_syls))
+            return (cost,)
             break
 
-    return cost
+    # at the end, don't want position to be too far from end - use as much of page as possible
+    # line_remaining = len(line_projs) - position
+    # cost += line_remaining ** 2
+
+    return (cost,)
 
 
 def absolute_to_relative_pos(position, strip_lengths):
@@ -257,17 +264,17 @@ def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=30
         end_pt = (rel_end_pos, cc_strips[end_line].offset_y)
 
         draw.line([start_pt, end_pt], fill='rgb(0, 0, 0)', width=5)
-        # draw.text(start_pt, syllables[i].text, fill='rgb(0, 0, 0)', font=font)
+        draw.text(start_pt, syllables[i].text, fill='rgb(0, 0, 0)', font=font)
         position = end_pos
 
     image.save(fname)
     return
 
 
-char_estimate_scale = 0.7
+char_estimate_scale = 1
 
 if __name__ == '__main__':
-    # filename = 'salzinnes_24'
+    # filename = 'salzinnes_11'
     # filename = 'einsiedeln_002v'
     # filename = 'stgall390_07'
     filename = 'klosterneuburg_23v'
@@ -318,13 +325,13 @@ if __name__ == '__main__':
     test_gaps = np.random.exponential(1.0, len(syllables))
     test_gaps = [int(x * room_for_gaps / sum(test_gaps)) for x in test_gaps]
 
-    res = gap_align_fitness(test_gaps, syllables, line_projs)
-    print(res)
-    visualize_gap_align(test_gaps, syllables, image, cc_strips, 'testalign.png')
+    fitness_func = functools.partial(gap_align_fitness, syllables=syllables, line_projs=line_projs)
 
-
-
-
+    # res = gap_align_fitness(test_gaps, syllables, line_projs)
+    # print(res)
+    # visualize_gap_align(test_gaps, syllables, image, cc_strips, 'testimg align.png')
+    pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), room_for_gaps)
+    visualize_gap_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
 
 def older_method():
     # filename = 'salzinnes_24'
