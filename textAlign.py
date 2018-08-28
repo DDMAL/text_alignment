@@ -20,34 +20,6 @@ reload(preproc)
 reload(syl)
 reload(alignmentGA)
 
-# PARAMETERS FOR PREPROCESSING
-# saturation_thresh = 0.6
-# sat_area_thresh = 150
-# despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-# noise_area_thresh = 600        # an int in : ignore ccs with area smaller than this
-#
-# # PARAMETERS FOR TEXT LINE SEGMENTATION
-# filter_size = 20                # size of moving-average filter used to smooth projection
-# prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
-# collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-# remove_capitals_scale = 2
-#
-# # CC GROUPING (BLOBS)
-# cc_group_gap_min = 10  # any gap at least this wide will be assumed to be a space between words!
-
-max_blob_sequences = 1000  # so nothing gets stuck
-num_blobs_lookahead = 3
-
-letter_width_dict = {
-    '*': 2,
-#     'm': 128,
-#     'l': 36,
-#     'i': 36,
-#     'a': 84,
-#     'c': 60,
-#     'e': 59,
- }
-
 
 def bounding_box(cc_list):
     '''
@@ -199,7 +171,7 @@ def gap_align_fitness(gaps, syllables, line_projs, verbose=False):
         cur_gap = gaps[i]
         if any([position < x < position + cur_gap for x in line_break_positions]):
             # print('gap -> line break')
-            factor /= 2
+            factor /= 1000
         gap_contains = line_projs_flat[position:position + cur_gap]
         position += cur_gap
 
@@ -207,7 +179,7 @@ def gap_align_fitness(gaps, syllables, line_projs, verbose=False):
         cur_syl = syllables[i].width
         if any([position < x < position + cur_syl for x in line_break_positions]):
             # print('syl -> line break')
-            factor *= 10
+            factor *= 100
         syl_contains = line_projs_flat[position:position + cur_syl]
         position += cur_syl
 
@@ -271,7 +243,7 @@ def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=30
     return
 
 
-char_estimate_scale = 1
+char_estimate_scale = 0.8
 
 if __name__ == '__main__':
     # filename = 'salzinnes_11'
@@ -332,6 +304,7 @@ if __name__ == '__main__':
     # visualize_gap_align(test_gaps, syllables, image, cc_strips, 'testimg align.png')
     pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), room_for_gaps)
     visualize_gap_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
+
 
 def older_method():
     # filename = 'salzinnes_24'

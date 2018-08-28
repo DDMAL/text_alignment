@@ -7,7 +7,7 @@ from deap import creator
 from deap import tools
 
 
-def run_GA(fitness_func, num_gaps, room_for_gaps, pop_size=1000, num_gens=60):
+def run_GA(fitness_func, num_gaps, room_for_gaps, pop_size=100, num_gens=30):
     avg_gap_size = int(room_for_gaps / num_gaps)
 
     # single objective fitness (only optimize on one criteria, minimizing it)
@@ -15,28 +15,35 @@ def run_GA(fitness_func, num_gaps, room_for_gaps, pop_size=1000, num_gens=60):
     creator.create("Individual", list, fitness=creator.FitnessMax)
     toolbox = base.Toolbox()
 
-    def individual_init(container, flatten=10):
+    def individual_init(container):
         ind = np.random.uniform(0, 1, num_gaps)
         ind = [int(round(x * room_for_gaps / sum(ind))) for x in ind]
 
         # correct for rounding errors
         diff = room_for_gaps - sum(ind)
         for i in range(abs(diff)):
-            rand_index = random.randint(0, num_gaps - 1)
+            temp = -1
+            while temp < 1:
+                rand_index = random.randint(0, num_gaps - 1)
+                temp = ind[rand_index]
             ind[rand_index] += np.sign(diff)
-
         return container(list(ind))
 
-    def mut_shift_adjacent(individual, max_amt, indpb):
-        for i in range(len(individual) - 1):
+    def mut_shift_adjacent(ind, max_amt, indpb):
+        for i in range(len(ind) - 1):
             if random.uniform(0, 1) > indpb:
                 continue
-            amt = random.randint(-1 * max_amt, max_amt)
-            amt = min([amt, individual[i], individual[i+1]])
-            individual[i] -= amt
-            individual[i+1] += amt
 
-        return (individual,)
+            sub_index = random.randint(0, 1)
+            add_index = 1 - sub_index
+            sub_index += i
+            add_index += i
+
+            amt = random.randint(0, min(max_amt, ind[sub_index]))
+            ind[sub_index] -= amt
+            ind[add_index] += amt
+
+        return (ind,)
 
     def keep_sum_crossover(ind1, ind2, minsize=3):
         pt2 = random.randint(3, len(ind1))
@@ -63,7 +70,7 @@ def run_GA(fitness_func, num_gaps, room_for_gaps, pop_size=1000, num_gens=60):
     toolbox.register("evaluate", fitness_func)
     toolbox.register("mate", keep_sum_crossover)
     # toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.25)
-    toolbox.register("mutate", mut_shift_adjacent, max_amt=avg_gap_size, indpb=0.25)
+    toolbox.register("mutate", mut_shift_adjacent, max_amt=avg_gap_size, indpb=0.15)
     toolbox.register("select", tools.selTournament, tournsize=3)
 
     random.seed(64)
