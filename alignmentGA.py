@@ -8,10 +8,10 @@ from deap import creator
 from deap import tools
 
 
-def run_GA(fitness_func, num_syls, strip_total_length, mut_amount=50, mut_prob=0.2, pop_size=200, num_gens=40):
+def run_GA(fitness_func, num_syls, strip_total_length, mut_amount=500, mut_prob=0.2, pop_size=500, num_gens=50):
 
     # single objective fitness (only optimize on one criteria, minimizing it)
-    creator.create("FitnessMax", base.Fitness, weights=(-1.0, -1.0))
+    creator.create("FitnessMax", base.Fitness, weights=(1.0,))
     creator.create("Individual", list, fitness=creator.FitnessMax)
     toolbox = base.Toolbox()
 
@@ -80,7 +80,7 @@ def run_GA(fitness_func, num_syls, strip_total_length, mut_amount=50, mut_prob=0
     toolbox.register("mate", crossover_and_sort)
     # toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.25)
     toolbox.register("mutate", mut_jitter, max_amt=mut_amount, indpb=mut_prob)
-    toolbox.register("select", tools.selNSGA2)
+    toolbox.register("select", tools.selTournament, tournsize=3)
 
     random.seed(64)
 

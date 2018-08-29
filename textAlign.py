@@ -146,85 +146,40 @@ def normalize_projection(strip):
     clipped = np.clip(proj, 0, med)
     max_clip = max(clipped)
     clipped = [x / max_clip for x in clipped]
-    return clipped
-
-
-def gap_align_fitness(gaps, syllables, line_projs, verbose=False):
-    # from syl_starts, get gaps between syls
-    # gaps = [syl_starts[i + 1] - syl_starts[i] for i in range(len(syl_starts) - 1)]
-    # gaps = [syl_starts[0]] + gaps
-    # gaps = [gaps[i] - syllables[i].width for i in range(len(gaps))]
-    # print(gaps)
-
-    line_projs_flat = [item for sublist in line_projs for item in sublist]
-
-    proj_lens = [len(x) for x in line_projs]
-    line_break_positions = [sum(proj_lens[:x]) for x in range(len(proj_lens))]
-
-    cost = 0
-    position = 0
-
-    for i in range(len(gaps)):
-        factor = 1
-
-        # check if the next gap will cross a line break - encourage that!
-        cur_gap = gaps[i]
-        if any([position < x < position + cur_gap for x in line_break_positions]):
-            # print('gap -> line break')
-            factor /= 1000
-        gap_contains = line_projs_flat[position:position + cur_gap]
-        position += cur_gap
-
-        # check if the next syllable will cross a line break - can't have that!
-        cur_syl = syllables[i].width
-        if any([position < x < position + cur_syl for x in line_break_positions]):
-            # print('syl -> line break')
-            factor *= 100
-        syl_contains = line_projs_flat[position:position + cur_syl]
-        position += cur_syl
-
-        cost += sum([x * x for x in gap_contains]) * factor
-        cost += sum([(1 - x) * (1 - x) for x in syl_contains]) * factor
-
-        if position >= len(line_projs_flat):
-            # print('gaps wider than projections')
-            remaining_gaps = gaps[i:]
-            remaining_syls = [x.width for x in syllables[i:]]
-            cost += (sum(remaining_gaps) + sum(remaining_syls))
-            return (cost,)
-            break
-
-    # at the end, don't want position to be too far from end - use as much of page as possible
-    # line_remaining = len(line_projs) - position
-    # cost += line_remaining ** 2
-
-    return (cost,)
+    return proj
 
 
 def pos_align_fitness(positions, syllables, line_projs, verbose=False):
 
     line_projs_flat = [item for sublist in line_projs for item in sublist]
-    overlap_counter = np.zeros(len(line_projs_flat) * 2)
+    overlap_counter = [0] * (len(line_projs_flat) * 2)
 
     proj_lens = [len(x) for x in line_projs]
     line_break_positions = [sum(proj_lens[:x]) for x in range(len(proj_lens))]
     line_crosses_cost = 0
 
+    score = 0
     for i, cur_pos in enumerate(positions):
         cur_end = cur_pos + syllables[i].width
-        line_projs_flat[cur_pos:cur_end] = np.zeros(cur_end - cur_pos)
         overlap_counter[cur_pos:cur_end] = [x + 1 for x in overlap_counter[cur_pos:cur_end]]
 
         # check if this syllable spans a line break - absolutely forbidden!
         crosses_line = [cur_pos < x < cur_end for x in line_break_positions]
         if any(crosses_line):
-            line_crosses_cost += syllables[i].width ** 2
+            line_crosses_cost += syllables[i].width
 
-    cost = sum(line_projs_flat)
+    for i, val in enumerate(line_projs_flat):
+        overlap_here = overlap_counter[i]
+        if overlap_here == 0:
+            continue
+        elif overlap_here == 1:
+            score += float(val)
+        else:
+            score -= overlap_here * overlap_here
+
     overlap_amt = sum([x * x for x in overlap_counter if x > 1.0])
-    cost += line_crosses_cost
 
-    return (overlap_amt, cost)
+    return (score,)
 
 
 def absolute_to_relative_pos(position, strip_lengths):
@@ -235,38 +190,6 @@ def absolute_to_relative_pos(position, strip_lengths):
             return i, position
     print('Given position larger than sum of strip lengths (out of bounds.)')
     return i, strip_lengths[-1]
-
-
-def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=30):
-
-    strip_lengths = [x.ncols for x in cc_strips]
-
-    gamera_image.save_image(fname)
-    image = pil.Image.open(fname)
-    draw = pil.ImageDraw.Draw(image)
-    font = pil.ImageFont.truetype('Arial.ttf', size=size)
-
-    # from current position of projection, find position on page
-    position = 0
-    for i in range(len(gaps)):
-        start_pos = position + gaps[i]
-        end_pos = start_pos + syllables[i].width
-
-        start_line, rel_start_pos = absolute_to_relative_pos(start_pos, strip_lengths)
-        end_line, rel_end_pos = absolute_to_relative_pos(end_pos, strip_lengths)
-
-        rel_start_pos += cc_strips[start_line].offset_x
-        rel_end_pos += cc_strips[end_line].offset_x
-
-        start_pt = (rel_start_pos, cc_strips[start_line].offset_y)
-        end_pt = (rel_end_pos, cc_strips[end_line].offset_y)
-
-        draw.line([start_pt, end_pt], fill='rgb(0, 0, 0)', width=5)
-        draw.text(start_pt, syllables[i].text, fill='rgb(0, 0, 0)', font=font)
-        position = end_pos
-
-    image.save(fname)
-    return
 
 
 def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, size=30):
@@ -299,7 +222,7 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
     return
 
 
-char_estimate_scale = 1.4
+char_estimate_scale = 1
 
 if __name__ == '__main__':
     # filename = 'salzinnes_11'
