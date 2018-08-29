@@ -1,64 +1,73 @@
 import numpy as np
 import array
 import random
+import collections
 from deap import algorithms
 from deap import base
 from deap import creator
 from deap import tools
 
 
-def run_GA(fitness_func, num_gaps, room_for_gaps, pop_size=100, num_gens=30):
-    avg_gap_size = int(room_for_gaps / num_gaps)
+def run_GA(fitness_func, num_syls, strip_total_length, mut_amount=50, mut_prob=0.2, pop_size=200, num_gens=40):
 
     # single objective fitness (only optimize on one criteria, minimizing it)
-    creator.create("FitnessMax", base.Fitness, weights=(-1.0,))
+    creator.create("FitnessMax", base.Fitness, weights=(-1.0, -1.0))
     creator.create("Individual", list, fitness=creator.FitnessMax)
     toolbox = base.Toolbox()
 
-    def individual_init(container):
-        ind = np.random.uniform(0, 1, num_gaps)
-        ind = [int(round(x * room_for_gaps / sum(ind))) for x in ind]
+    def jitter_duplicates(ind, jit_amt=20):
+        while len(set(ind)) != len(ind):
+            dups = collections.defaultdict(list)
+            for i, x in enumerate(ind):
+                dups[x].append(i)
 
-        # correct for rounding errors
-        diff = room_for_gaps - sum(ind)
-        for i in range(abs(diff)):
-            temp = -1
-            while temp < 1:
-                rand_index = random.randint(0, num_gaps - 1)
-                temp = ind[rand_index]
-            ind[rand_index] += np.sign(diff)
+            indices_to_jitter = []
+
+            for key in dups.keys():
+                indices_to_jitter += dups[key][1:]
+
+            for i in indices_to_jitter:
+                ind[i] += random.randint(-1 * jit_amt, jit_amt)
+                ind[i] = max(0, ind[i])
+                ind[i] = min(strip_total_length - 1, ind[i])
+
+        return ind
+
+    def individual_init(container):
+        ind = np.random.randint(0, strip_total_length - 1, num_syls)
+        ind = sorted(ind)
         return container(list(ind))
 
-    def mut_shift_adjacent(ind, max_amt, indpb):
+    def mut_jitter(ind, max_amt, indpb):
         for i in range(len(ind) - 1):
             if random.uniform(0, 1) > indpb:
                 continue
 
-            sub_index = random.randint(0, 1)
-            add_index = 1 - sub_index
-            sub_index += i
-            add_index += i
+            ind[i] += random.randint(-1 * max_amt, max_amt)
 
-            amt = random.randint(0, min(max_amt, ind[sub_index]))
-            ind[sub_index] -= amt
-            ind[add_index] += amt
+            # keep all positions within valid indices
+            ind[i] = min(0, ind[i])
+            ind[i] = max(strip_total_length - 1, ind[i])
 
+        ind = jitter_duplicates(ind)
+        ind.sort()
         return (ind,)
 
-    def keep_sum_crossover(ind1, ind2, minsize=3):
+    def crossover_and_sort(ind1, ind2, minsize=3):
         pt2 = random.randint(3, len(ind1))
         pt1 = random.randint(0, pt2 - 3)
 
         slice1 = ind1[pt1:pt2]
         slice2 = ind2[pt1:pt2]
-        sum_slice1 = max(sum(slice1), 1)
-        sum_slice2 = max(sum(slice2), 1)
-        # shrink or expand slices so that they each fit in the other's sequence while maintaining the sum
-        slice1 = [int(round(x * sum_slice2 / sum_slice1)) for x in slice1]
-        slice2 = [int(round(x * sum_slice1 / sum_slice2)) for x in slice2]
 
         ind1[pt1:pt2] = slice2
         ind2[pt1:pt2] = slice1
+
+        ind1 = jitter_duplicates(ind1)
+        ind2 = jitter_duplicates(ind2)
+
+        ind1.sort()
+        ind2.sort()
 
         return ind1, ind2
 
@@ -68,22 +77,22 @@ def run_GA(fitness_func, num_gaps, room_for_gaps, pop_size=100, num_gens=30):
     toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
     toolbox.register("evaluate", fitness_func)
-    toolbox.register("mate", keep_sum_crossover)
+    toolbox.register("mate", crossover_and_sort)
     # toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.25)
-    toolbox.register("mutate", mut_shift_adjacent, max_amt=avg_gap_size, indpb=0.15)
-    toolbox.register("select", tools.selTournament, tournsize=3)
+    toolbox.register("mutate", mut_jitter, max_amt=mut_amount, indpb=mut_prob)
+    toolbox.register("select", tools.selNSGA2)
 
     random.seed(64)
 
     pop = toolbox.population(n=pop_size)
     hof = tools.HallOfFame(1)
     stats = tools.Statistics(lambda ind: ind.fitness.values)
-    stats.register("avg", np.mean)
-    stats.register("std", np.std)
-    stats.register("min", np.min)
-    stats.register("max", np.max)
+    stats.register("avg", np.mean, axis=0)
+    stats.register("std", np.std, axis=0)
+    stats.register("min", np.min, axis=0)
+    stats.register("max", np.max, axis=0)
 
-    pop, log = algorithms.eaSimple(pop, toolbox, cxpb=0.75, mutpb=0.25, ngen=num_gens,
+    pop, log = algorithms.eaSimple(pop, toolbox, cxpb=0.55, mutpb=0.2, ngen=num_gens,
                                    stats=stats, halloffame=hof, verbose=True)
 
     return pop, log, hof

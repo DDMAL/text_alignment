@@ -201,6 +201,32 @@ def gap_align_fitness(gaps, syllables, line_projs, verbose=False):
     return (cost,)
 
 
+def pos_align_fitness(positions, syllables, line_projs, verbose=False):
+
+    line_projs_flat = [item for sublist in line_projs for item in sublist]
+    overlap_counter = np.zeros(len(line_projs_flat) * 2)
+
+    proj_lens = [len(x) for x in line_projs]
+    line_break_positions = [sum(proj_lens[:x]) for x in range(len(proj_lens))]
+    line_crosses_cost = 0
+
+    for i, cur_pos in enumerate(positions):
+        cur_end = cur_pos + syllables[i].width
+        line_projs_flat[cur_pos:cur_end] = np.zeros(cur_end - cur_pos)
+        overlap_counter[cur_pos:cur_end] = [x + 1 for x in overlap_counter[cur_pos:cur_end]]
+
+        # check if this syllable spans a line break - absolutely forbidden!
+        crosses_line = [cur_pos < x < cur_end for x in line_break_positions]
+        if any(crosses_line):
+            line_crosses_cost += syllables[i].width ** 2
+
+    cost = sum(line_projs_flat)
+    overlap_amt = sum([x * x for x in overlap_counter if x > 1.0])
+    cost += line_crosses_cost
+
+    return (overlap_amt, cost)
+
+
 def absolute_to_relative_pos(position, strip_lengths):
     for i in range(len(strip_lengths)):
         if position > strip_lengths[i]:
@@ -222,7 +248,7 @@ def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=30
 
     # from current position of projection, find position on page
     position = 0
-    for i in range(len(syllables)):
+    for i in range(len(gaps)):
         start_pos = position + gaps[i]
         end_pos = start_pos + syllables[i].width
 
@@ -243,7 +269,37 @@ def visualize_gap_align(gaps, syllables, gamera_image, cc_strips, fname, size=30
     return
 
 
-char_estimate_scale = 0.8
+def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, size=30):
+
+    strip_lengths = [x.ncols for x in cc_strips]
+
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+
+    # from current position of projection, find position on page
+    position = 0
+    for i, pos in enumerate(positions):
+        end_pos = pos + syllables[i].width
+        start_line, start_rel_pos = absolute_to_relative_pos(pos, strip_lengths)
+        end_line, end_rel_pos = absolute_to_relative_pos(end_pos, strip_lengths)
+
+        start_rel_pos += cc_strips[start_line].offset_x
+        end_rel_pos += cc_strips[end_line].offset_x
+
+        start_pt = (start_rel_pos, cc_strips[start_line].offset_y)
+        end_pt = (end_rel_pos, cc_strips[end_line].offset_y)
+
+        draw.line([start_pt, end_pt], fill='rgb(0, 0, 0)', width=5)
+        draw.text(start_pt, syllables[i].text, fill='rgb(0, 0, 0)', font=font)
+        position = end_pos
+
+    image.save(fname)
+    return
+
+
+char_estimate_scale = 1.4
 
 if __name__ == '__main__':
     # filename = 'salzinnes_11'
@@ -293,17 +349,14 @@ if __name__ == '__main__':
             width=width)
             )
 
-    room_for_gaps = sum([x.ncols for x in cc_strips]) - int(total_width * char_estimate_scale)
-    test_gaps = np.random.exponential(1.0, len(syllables))
-    test_gaps = [int(x * room_for_gaps / sum(test_gaps)) for x in test_gaps]
+    fitness_func = functools.partial(pos_align_fitness, syllables=syllables, line_projs=line_projs)
+    strip_total_length = sum([x.ncols for x in cc_strips])
+    pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
 
-    fitness_func = functools.partial(gap_align_fitness, syllables=syllables, line_projs=line_projs)
-
-    # res = gap_align_fitness(test_gaps, syllables, line_projs)
+    # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
+    # res = pos_align_fitness(test_positions, syllables, line_projs)
     # print(res)
-    # visualize_gap_align(test_gaps, syllables, image, cc_strips, 'testimg align.png')
-    pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), room_for_gaps)
-    visualize_gap_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
+    visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
 
 
 def older_method():
