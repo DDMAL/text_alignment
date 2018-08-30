@@ -223,13 +223,13 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
     image.save(fname)
     return
 
-char_estimate_scale = 0.8
+char_estimate_scale = 1
 
 if __name__ == '__main__':
-    filename = 'salzinnes_18'
+    # filename = 'salzinnes_18'
     # filename = 'einsiedeln_002v'
     # filename = 'stgall390_07'
-    # filename = 'klosterneuburg_23v'
+    filename = 'klosterneuburg_23v'
 
     # def process(filename):
     print('processing ' + filename + '...')
@@ -275,6 +275,7 @@ if __name__ == '__main__':
 
     fitness_func = functools.partial(pos_align_fitness, syllables=syllables, line_projs=line_projs)
     strip_total_length = sum([x.ncols for x in cc_strips])
+    line_projs_flat = [item for sublist in line_projs for item in sublist]
     # pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
     # visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
     # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
@@ -283,9 +284,9 @@ if __name__ == '__main__':
 
     # TEST WITH FORWARD CONVOLUTION
 
-lookahead_pixels = 1500
+lookahead_pixels = 500
 branches_per_step = 6
-max_num_seqs = 125
+max_num_seqs = 200
 
 completed_sequences = []
 
@@ -296,13 +297,13 @@ for width in set([s.width for s in syllables]):
     conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
     convolutions[width] = conv
 
-for step in range(3000):
+for step in range(10000):
 
     if not seqs:
         print('finished branching.')
         break
 
-    print(step, len(seqs), max([x.score for x in seqs]), len([x for x in seqs if x.completed]))
+    print(step, len(seqs), max([x.score for x in seqs + completed_sequences]), len(completed_sequences))
     this_equiv = seqs[0].equivalence()
 
     equivalent_seqs = [s for s in seqs if s.equivalence() == this_equiv]
@@ -313,19 +314,22 @@ for step in range(3000):
     for seq in equivalent_seqs:
         seqs.remove(seq)
 
+    if len(syllables) == len(current_seq.positions):
+        current_seq.completed = True
+        completed_sequences.append(current_seq)
+        continue
+
     current_head = current_seq.head()
     width = syllables[len(current_seq.positions)].width
     convolve_slice = convolutions[width][current_head:current_head + lookahead_pixels]
 
     # get the most prominent peaks in the lookahead interval of the convolution
-    peaks = preproc.find_peak_locations(convolve_slice, 0, ranked=True)
-
-    if (current_head + width > strip_total_length or
-            len(syllables) == len(current_seq.positions) or
-            not peaks):
-        current_seq.completed = True
-        completed_sequences.append(current_seq)
-        continue
+    peaks = []
+    count = 0
+    while len(peaks) < branches_per_step:
+        count += 1
+        convolve_slice = convolutions[width][current_head:current_head + (lookahead_pixels * count)]
+        peaks = preproc.find_peak_locations(convolve_slice, 0, ranked=True)
 
     # adding current_head here to make sure we're correctly aligned with the global line projection
     next_locs = [x[0] + current_head for x in peaks[:branches_per_step]]
@@ -343,10 +347,11 @@ for step in range(3000):
         scores = sorted([x.score for x in seqs], reverse=True)
         seqs = [x for x in seqs if x.score > scores[max_num_seqs]]
 
-print(seqs)
+best_seq = max(completed_sequences, key=lambda x: x.score)
+visualize_pos_align(best_seq.positions, syllables, image, cc_strips, 'testimg align.png')
 
-plt.clf()
-plt.figure(num=None, dpi=400, figsize=(20, 3))
-plt.plot(convolved, c='black', linewidth=0.5)
-plt.plot(line_projs_flat[0:lookahead_pixels], c='gray', linewidth=0.5)
-plt.savefig("testplot.png")
+# plt.clf()
+# plt.figure(num=None, dpi=400, figsize=(20, 3))
+# plt.plot(convolved, c='black', linewidth=0.5)
+# plt.plot(line_projs_flat[0:lookahead_pixels], c='gray', linewidth=0.5)
+# plt.savefig("testplot.png")
