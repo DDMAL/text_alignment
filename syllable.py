@@ -7,3 +7,26 @@ class Syllable(object):
 
     def __repr__(self):
         return str(self.__dict__)
+
+
+class AlignSequence(object):
+
+    def __init__(self, positions):
+        self.score = 0
+        self.positions = positions
+        self.completed = False
+
+    def __repr__(self):
+        return str(self.__dict__)
+
+    def head(self):
+        if len(self.positions):
+            return self.positions[-1]
+        else:
+            return 0
+
+    def equivalence(self):
+        if self.completed:
+            return True
+        else:
+            return (len(self.positions), self.head())

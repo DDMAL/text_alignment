@@ -8,7 +8,7 @@ from deap import creator
 from deap import tools
 
 
-def run_GA(fitness_func, num_syls, strip_total_length, mut_amount=500, mut_prob=0.2, pop_size=500, num_gens=50):
+def run_GA(fitness_func, num_syls, strip_total_length, mut_amount=100, mut_prob=0.2, pop_size=2000, num_gens=100):
 
     # single objective fitness (only optimize on one criteria, minimizing it)
     creator.create("FitnessMax", base.Fitness, weights=(1.0,))

@@ -7,6 +7,7 @@ import functools
 import alignmentGA
 import os
 import re
+import bisect
 import latinSyllabification
 import textAlignPreprocessing as preproc
 from os.path import isfile, join
@@ -47,8 +48,9 @@ def imsv(img, fname="testimg.png"):
 
 def plot(inp):
     plt.clf()
-    asdf = plt.plot(inp, c='black', linewidth=0.5)
-    plt.savefig("testplot.png", dpi=800)
+    plt.figure(num=None, dpi=400, figsize=(30, 3))
+    plt.plot(inp, c='black', linewidth=0.5)
+    plt.savefig("testplot.png")
 
 
 def draw_lines(image, line_locs, horizontal=True):
@@ -146,7 +148,7 @@ def normalize_projection(strip):
     clipped = np.clip(proj, 0, med)
     max_clip = max(clipped)
     clipped = [x / max_clip for x in clipped]
-    return proj
+    return clipped
 
 
 def pos_align_fitness(positions, syllables, line_projs, verbose=False):
@@ -171,7 +173,7 @@ def pos_align_fitness(positions, syllables, line_projs, verbose=False):
     for i, val in enumerate(line_projs_flat):
         overlap_here = overlap_counter[i]
         if overlap_here == 0:
-            continue
+            score -= float(val)
         elif overlap_here == 1:
             score += float(val)
         else:
@@ -221,14 +223,13 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
     image.save(fname)
     return
 
-
-char_estimate_scale = 1
+char_estimate_scale = 0.8
 
 if __name__ == '__main__':
-    # filename = 'salzinnes_11'
+    filename = 'salzinnes_18'
     # filename = 'einsiedeln_002v'
     # filename = 'stgall390_07'
-    filename = 'klosterneuburg_23v'
+    # filename = 'klosterneuburg_23v'
 
     # def process(filename):
     print('processing ' + filename + '...')
@@ -274,177 +275,78 @@ if __name__ == '__main__':
 
     fitness_func = functools.partial(pos_align_fitness, syllables=syllables, line_projs=line_projs)
     strip_total_length = sum([x.ncols for x in cc_strips])
-    pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
-
+    # pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
+    # visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
     # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
     # res = pos_align_fitness(test_positions, syllables, line_projs)
     # print(res)
-    visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
 
+    # TEST WITH FORWARD CONVOLUTION
 
-def older_method():
-    # filename = 'salzinnes_24'
-    # filename = 'einsiedeln_002v'
-    # filename = 'stgall390_07'
-    filename = 'klosterneuburg_23v'
+lookahead_pixels = 1500
+branches_per_step = 6
+max_num_seqs = 125
 
-    # def process(filename):
-    print('processing ' + filename + '...')
+completed_sequences = []
 
-    raw_image = gc.load_image('./png/' + filename + '_text.png')
-    try:
-        staff_image = gc.load_image('./png/' + filename + '_stafflines.png')
-    except IOError:
-        staff_image = None
-        print('no stafflines image...')
+print('precomputing convolutions...')
+seqs = [syl.AlignSequence(positions=[])]
+convolutions = {}
+for width in set([s.width for s in syllables]):
+    conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
+    convolutions[width] = conv
 
-    image, staff_image = preproc.preprocess_images(raw_image, staff_image)
-    cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
-    cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
-    cc_strips = [union_images(line) for line in cc_lines]
-    line_projs = [normalize_projection(x) for x in cc_strips]
+for step in range(3000):
 
-    gap_sizes = []
-    cc_groups = []
-    for x in cc_lines:
-        grouped, gaps = preproc.group_ccs(x)
-        gap_sizes += gaps + [np.inf]
-        cc_groups += grouped
+    if not seqs:
+        print('finished branching.')
+        break
 
-    transcript_string, words_begin = latinSyllabification.parse_transcript(
-            './png/' + filename + '_transcript.txt')
+    print(step, len(seqs), max([x.score for x in seqs]), len([x for x in seqs if x.completed]))
+    this_equiv = seqs[0].equivalence()
 
-    blob_lengths = []
-    for g in cc_groups:
-        width = sum([x.ncols for x in g])
-        blob_lengths.append(width)
+    equivalent_seqs = [s for s in seqs if s.equivalence() == this_equiv]
+    current_seq = max(equivalent_seqs, key=lambda x: x.score)
 
-    transcript_lengths = [len(x) for x in transcript_string]
+    # remove equivalent seqs; we only care about the one with highest score
+    print('removing ' + str(len(equivalent_seqs)) + ' from class ' + str(this_equiv))
+    for seq in equivalent_seqs:
+        seqs.remove(seq)
 
-    # estimate length of each syllable
-    avg_char_length = round(sum(blob_lengths) / sum(transcript_lengths))
-    avg_syl_length = round(sum(blob_lengths) / len(blob_lengths))
-    syl_lengths = []
-    letter_dict = defaultdict(lambda: avg_char_length, **letter_width_dict)
-    for syl in transcript_string:
-        this_width = 0
-        for char in syl:
-            this_width += letter_dict[char]
-        syl_lengths.append(this_width)
+    current_head = current_seq.head()
+    width = syllables[len(current_seq.positions)].width
+    convolve_slice = convolutions[width][current_head:current_head + lookahead_pixels]
 
-    # set up for sequence searching
-    first_word_begin = [x for x in words_begin if x > 0][0]
-    init_seqs = iter.product(range(0, first_word_begin + 1), range(1, num_blobs_lookahead + 1))
-    sequences = [[x] for x in init_seqs]
-    finished_seqs = []
+    # get the most prominent peaks in the lookahead interval of the convolution
+    peaks = preproc.find_peak_locations(convolve_slice, 0, ranked=True)
 
-    def current_position_of_seq(seq):
-        return (sum([x[0] for x in seq]), sum([x[1] for x in seq]))
+    if (current_head + width > strip_total_length or
+            len(syllables) == len(current_seq.positions) or
+            not peaks):
+        current_seq.completed = True
+        completed_sequences.append(current_seq)
+        continue
 
-    # iterating over blobs
-    continue_looping = True
-    while(sequences):
+    # adding current_head here to make sure we're correctly aligned with the global line projection
+    next_locs = [x[0] + current_head for x in peaks[:branches_per_step]]
 
-        print(sequences[0])
+    # make new sequences using the next_locs, evaluate their scores, and insert them into the sequence
+    # list, using bisect to keep it sorted so that the ones with the lowest head() are always first
+    for loc in next_locs:
+        new_seq = syl.AlignSequence(positions=current_seq.positions + [loc])
+        new_seq.score = pos_align_fitness(new_seq.positions, syllables, line_projs)[0]
+        keys = [s.head() for s in seqs]
+        ind = bisect.bisect_left(keys, loc)
+        seqs.insert(ind, new_seq)
 
-        new_sequences = []
-        # print('group length', gl)
+    if len(seqs) > max_num_seqs:
+        scores = sorted([x.score for x in seqs], reverse=True)
+        seqs = [x for x in seqs if x.score > scores[max_num_seqs]]
 
-        # branch out from every sequence in list of sequences
-        blob_min_pos = min([sum([x[1] for x in seq]) for seq in sequences])
-        print('min blob position', blob_min_pos)
-        earliest_seqs = []
-        other_seqs = []
-        # earliest_seqs = [seq for seq in sequences if sum([x[1] for x in seq]) == blob_min_pos]
-        for seq in sequences:
-            if sum([x[1] for x in seq]) == blob_min_pos:
-                earliest_seqs.append(seq)
-            else:
-                other_seqs.append(seq)
+print(seqs)
 
-        print('earliest seqs len', len(earliest_seqs), 'vs', len(other_seqs))
-
-        branches = []
-        for seq in earliest_seqs:
-
-            # lower bound on number of syllables that could possibly be assigned to this blob?
-            min_branches = 0
-
-            # max number of branches = branch syllables until reach end of current word
-            pos, blob_pos = current_position_of_seq(seq)
-
-            if pos == len(transcript_string) or blob_pos == len(blob_lengths):
-                this_fitness = alignment_fitness(seq, blob_lengths, syl_lengths, gap_sizes)
-                finished_seqs.append((this_fitness, seq))
-                continue
-
-            next_words = [x for x in words_begin if x > pos]
-            next_word_start = next_words[0] if next_words else len(transcript_string)
-            max_branches = next_word_start - pos
-
-            syl_extensions = range(min_branches, max_branches + 1)
-
-            max_blobs = min(num_blobs_lookahead, len(blob_lengths) - blob_pos)
-            blob_extensions = range(1, max_blobs + 1)
-
-            branches += [seq + [i] for i in iter.product(syl_extensions, blob_extensions)]
-
-        print('num branches', len(branches))
-        branches += other_seqs
-        # filtering step: when two sequences have met the same point (same blob, same syllable), remove the ones with highest cost since they couldn't possibly do any better
-
-        sums_and_seqs = [(current_position_of_seq(x), x) for x in branches]
-        sums_and_seqs.sort(key=lambda x: x[0])
-
-        for key, group in iter.groupby(sums_and_seqs, lambda x: x[0]):
-            group = [x[1] for x in group]
-            scores = [(alignment_fitness(x, blob_lengths, syl_lengths, gap_sizes), x) for x in group]
-            best_group_member = min(scores, key=lambda x: x[0])
-            new_sequences.append(best_group_member)
-
-        # after previous for loop new_sequences still has a cost associated with each sequence
-        # remove all but the least costly sequences
-        print('len new sequences', len(new_sequences))
-        print('finished seqs', len(finished_seqs))
-        new_sequences.sort(key=lambda x: x[0])
-
-        sequences = [x[1] for x in new_sequences][:max_blob_sequences]
-
-        print("----")
-
-    finished_seqs.sort(key=lambda x: x[0])
-
-    res = []
-    syl_pos = 0
-    blob_pos = 0
-    for i, x in enumerate(finished_seqs[0][1]):
-        end_syl_index = syl_pos + x[0]
-        used_syllables_indices = list(range(syl_pos, end_syl_index))
-        syl_pos = end_syl_index
-        used_syllables = '-'.join([transcript_string[j] for j in used_syllables_indices])
-        syl_length_sum = sum([syl_lengths[j] for j in used_syllables_indices])
-
-        end_blob_index = blob_pos + x[1]
-        used_blob_indices = list(range(blob_pos, end_blob_index))
-        blob_pos = end_blob_index
-        used_blobs = '-'.join([str(blob_lengths[j]) for j in used_blob_indices])
-        res.append((used_blobs, used_syllables, syl_length_sum, x))
-    print(res)
-
-    draw_blob_alignment(finished_seqs[0][1], transcript_string, cc_groups,
-                        image, fname="testimg " + filename + ".png")
-
-    # draw lines representing cc_lines groupings
-    col_image = image.image_copy()
-    if staff_image:
-        col_image = col_image.add_images(staff_image)
-    col_image = col_image.to_rgb()
-    for line in cc_lines:
-        red = np.random.randint(0, 255)
-        grn = np.random.randint(0, 255)
-        blu = np.random.randint(0, 255)
-        for cc in line:
-            col_image.draw_hollow_rect(cc.ul, cc.lr, gc.RGBPixel(red, grn, blu), 5)
-
-    # draw lines representing horizontal projection peaks
-    imsv(draw_lines(col_image, lines_peak_locs), fname="testimg " + filename + " hlines.png")
+plt.clf()
+plt.figure(num=None, dpi=400, figsize=(20, 3))
+plt.plot(convolved, c='black', linewidth=0.5)
+plt.plot(line_projs_flat[0:lookahead_pixels], c='gray', linewidth=0.5)
+plt.savefig("testplot.png")

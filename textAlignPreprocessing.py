@@ -99,11 +99,15 @@ def calculate_peak_prominence(data, index):
     return prominence
 
 
-def find_peak_locations(data, tol=prominence_tolerance):
+def find_peak_locations(data, tol=prominence_tolerance, ranked=False):
     prominences = [(i, calculate_peak_prominence(data, i)) for i in range(len(data))]
 
     # normalize to interval [0,1]
     prom_max = max([x[1] for x in prominences])
+    if prom_max == 0 or len(prominences) == 0:
+        # failure to find any peaks; probably monotonically increasing / decreasing
+        return False
+
     prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
 
     # take only the tallest peaks above given tolerance
@@ -117,7 +121,10 @@ def find_peak_locations(data, tol=prominence_tolerance):
     for r in to_remove:
         peak_locs.remove(r)
 
-    peak_locs[:] = [x[0] for x in peak_locs]
+    if ranked:
+        peak_locs.sort(key=lambda x: x[1] * -1)
+    else:
+        peak_locs[:] = [x[0] for x in peak_locs]
 
     return peak_locs
 
