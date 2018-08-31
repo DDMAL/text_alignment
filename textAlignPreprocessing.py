@@ -106,7 +106,7 @@ def find_peak_locations(data, tol=prominence_tolerance, ranked=False):
     prom_max = max([x[1] for x in prominences])
     if prom_max == 0 or len(prominences) == 0:
         # failure to find any peaks; probably monotonically increasing / decreasing
-        return False
+        return []
 
     prominences[:] = [(x[0], x[1] / prom_max) for x in prominences]
 

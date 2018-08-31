@@ -324,12 +324,19 @@ for step in range(10000):
     convolve_slice = convolutions[width][current_head:current_head + lookahead_pixels]
 
     # get the most prominent peaks in the lookahead interval of the convolution
+    # if there aren't enough peaks, look further
+    # if there are 0 peaks all the way to the end, this sequence is dead.
     peaks = []
     count = 0
-    while len(peaks) < branches_per_step:
+    while len(peaks) < branches_per_step and \
+            current_head + (lookahead_pixels * count) < strip_total_length:
         count += 1
         convolve_slice = convolutions[width][current_head:current_head + (lookahead_pixels * count)]
         peaks = preproc.find_peak_locations(convolve_slice, 0, ranked=True)
+
+    if not peaks:
+        print("sequence dead", count, current_head, width)
+        continue
 
     # adding current_head here to make sure we're correctly aligned with the global line projection
     next_locs = [x[0] + current_head for x in peaks[:branches_per_step]]

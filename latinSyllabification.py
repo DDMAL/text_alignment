@@ -87,6 +87,9 @@ def parse_transcript(filename, syllabify=True):
     text = text.replace(' ', '- ')
     text = re.compile('[-]').split(text)
 
+    # remove empty strings, if they're in there for some reason
+    text = [x for x in text if x]
+
     words_begin = []
     # words_begin.append(0)
     # for i, x in enumerate(text):
