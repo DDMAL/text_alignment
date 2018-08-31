@@ -88,14 +88,8 @@ def parse_transcript(filename, syllabify=True):
     text = re.compile('[-]').split(text)
 
     # remove empty strings, if they're in there for some reason
-    text = [x for x in text if x]
-
+    text = [x for x in text if not x.isspace()]
     words_begin = []
-    # words_begin.append(0)
-    # for i, x in enumerate(text):
-    #     if x[0] == ' ':
-    #         text[i] = text[i][1:]
-    #         words_begin.append(i)
 
     for i, x in enumerate(text):
         if x[0] == ' ':
