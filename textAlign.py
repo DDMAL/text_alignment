@@ -159,6 +159,7 @@ def pos_align_fitness(positions, syllables, line_projs, verbose=False):
     proj_lens = [len(x) for x in line_projs]
     line_break_positions = [sum(proj_lens[:x]) for x in range(len(proj_lens))]
     line_crosses_cost = 0
+    word_min_gap_cost = 0
 
     score = 0
     for i, cur_pos in enumerate(positions):
@@ -170,6 +171,17 @@ def pos_align_fitness(positions, syllables, line_projs, verbose=False):
         if any(crosses_line):
             line_crosses_cost += syllables[i].width
 
+        if not syllables[i].word_begin:
+            continue
+
+        # if this syllable begins a word, then figure out what the gap is between the previous one
+        # and heavily disincentivize small gaps
+        left_bound = syllables[i - 1].width + positions[i - 1]
+        gap = cur_pos - left_bound
+
+        if gap < word_min_gap:
+            word_min_gap_cost += word_min_gap - gap
+
     for i, val in enumerate(line_projs_flat):
         overlap_here = overlap_counter[i]
         if overlap_here == 0:
@@ -177,7 +189,9 @@ def pos_align_fitness(positions, syllables, line_projs, verbose=False):
         elif overlap_here == 1:
             score += float(val)
         else:
-            score -= overlap_here * overlap_here
+            score -= float(val) * overlap_here
+
+    score -= word_min_gap_cost ** 2
 
     overlap_amt = sum([x * x for x in overlap_counter if x > 1.0])
 
@@ -227,6 +241,7 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
 char_estimate_scale = 1
 overlap_allow = 0.7
 mut_prob = 0.01
+word_min_gap = 30
 
 if __name__ == '__main__':
     # filename = 'salzinnes_18'
@@ -279,6 +294,8 @@ if __name__ == '__main__':
     fitness_func = functools.partial(pos_align_fitness, syllables=syllables, line_projs=line_projs)
     strip_total_length = sum([x.ncols for x in cc_strips])
     line_projs_flat = [item for sublist in line_projs for item in sublist]
+    total_syl_length = sum([x.width for x in syllables])
+    space_per_syl = int(float(strip_total_length - total_syl_length) / len(syllables))
 
     print('precomputing convolutions...')
     convolutions = {}
@@ -286,9 +303,14 @@ if __name__ == '__main__':
         conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
         convolutions[width] = conv
 
+    pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
+    visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
+    # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
+    # res = pos_align_fitness(test_positions, syllables, line_projs)
+
+
+def jittering_method():
     sequence = [0]
-    total_syl_length = sum([x.width for x in syllables])
-    space_per_syl = int(float(strip_total_length - total_syl_length) / len(syllables))
 
     for syl in syllables[:-1]:
         sequence.append(sequence[-1] + syl.width + space_per_syl)
@@ -343,10 +365,6 @@ if __name__ == '__main__':
         counter += 1
 
     visualize_pos_align(sequences[0], syllables, image, cc_strips, 'testimg align.png')
-    # pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
-    # visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
-    # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
-    # res = pos_align_fitness(test_positions, syllables, line_projs)
 
 
 # TEST WITH FORWARD CONVOLUTION
