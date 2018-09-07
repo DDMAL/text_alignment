@@ -4,7 +4,8 @@ CF-*
 testimg*
 testplot*
 png/
-letters/
+.DS_Store
+alignenv/
 *.ttf
 
 # Byte-compiled / optimized / DLL files

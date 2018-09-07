@@ -6,6 +6,7 @@ import itertools as iter
 import functools
 import alignmentGA
 import os
+import scipy.signal
 import re
 import bisect
 import latinSyllabification
@@ -13,7 +14,7 @@ import textAlignPreprocessing as preproc
 from os.path import isfile, join
 import numpy as np
 import syllable as syl
-import PIL as pil  # python imaging library, for testing only
+import PIL as pil
 from PIL import Image, ImageDraw, ImageFont
 from collections import defaultdict
 reload(latinSyllabification)
@@ -144,11 +145,14 @@ def sigmoid(x):
 
 def normalize_projection(strip):
     proj = strip.projection_cols()
-    med = np.median([x for x in proj if x > 1])
-    clipped = np.clip(proj, 0, med)
-    max_clip = max(clipped)
-    clipped = [x / max_clip for x in clipped]
-    return clipped
+    # med = np.median([x for x in proj if x > 1])
+    # clipped = np.clip(proj, 0, med)
+    # max_clip = max(clipped)
+    # clipped = [x / max_clip for x in clipped]
+    proj = [np.log(x + 1) for x in proj]
+    medlog = np.median([x for x in proj if x > 1])
+    proj = [np.floor(2 * x / medlog) for x in proj]
+    return proj
 
 
 def pos_align_fitness(positions, syllables, line_projs, verbose=False):
@@ -244,12 +248,12 @@ mut_prob = 0.01
 word_min_gap = 30
 
 if __name__ == '__main__':
-    # filename = 'salzinnes_18'
-    # filename = 'einsiedeln_002v'
-    # filename = 'stgall390_07'
-    filename = 'klosterneuburg_23v'
+    #filename = 'salzinnes_18'
+    # filename = 'einsiedeln_003v'
+    filename = 'stgall390_07'
+    # filename = 'klosterneuburg_23v'
 
-    # def process(filename):
+    # def process`      (filename):
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '_text.png')
@@ -303,10 +307,31 @@ if __name__ == '__main__':
         conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
         convolutions[width] = conv
 
-    pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
-    visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
+    plt.clf()
+    plt.figure(num=None, dpi=400, figsize=(50, 3))
+    pos = 0
+    for strip in cc_strips:
+        plt.axvline(pos)
+        pos += strip.ncols
+    plt.plot(line_projs_flat, c='black', linewidth=0.5)
+    plt.savefig("testplot.png")
+
+    # pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
+    # graph_approach()
+    # visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
     # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
     # res = pos_align_fitness(test_positions, syllables, line_projs)
+
+    f, t, Sxx = scipy.signal.spectrogram(np.array(line_projs_flat), nperseg=512, noverlap=256)
+
+    plt.clf()
+    plt.figure(num=None, dpi=400, figsize=(12, 12))
+    plt.pcolormesh(t, f, Sxx)
+    pos = 0
+    for strip in cc_strips:
+        plt.axvline(pos)
+        pos += strip.ncols
+    plt.savefig("testspectrogram.png")
 
 
 def jittering_method():
@@ -369,11 +394,12 @@ def jittering_method():
 
 # TEST WITH FORWARD CONVOLUTION
 def graph_approach():
-    lookahead_pixels = 250
-    branches_per_step = 4
-    max_num_seqs = 500
+    lookahead_pixels = 500
+    branches_per_step = 3
+    max_num_seqs = 100
 
     completed_sequences = []
+    dead_sequences = []
     seqs = [syl.AlignSequence(positions=[])]
 
     for step in range(1000000):
@@ -415,6 +441,7 @@ def graph_approach():
 
         if not peaks:
             print("sequence dead", count, current_head, len(current_seq.positions))
+            dead_sequences.append(current_seq)
             continue
 
         # adding current_head here to make sure we're correctly aligned with the global line projection
@@ -433,5 +460,5 @@ def graph_approach():
             scores = sorted([x.score for x in seqs], reverse=True)
             seqs = [x for x in seqs if x.score > scores[max_num_seqs]]
 
-    best_seq = max(completed_sequences, key=lambda x: x.score)
+    best_seq = max(completed_sequences + dead_sequences, key=lambda x: x.score)
     visualize_pos_align(best_seq.positions, syllables, image, cc_strips, 'testimg align.png')
