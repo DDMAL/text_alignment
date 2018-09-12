@@ -10,7 +10,7 @@ import os
 import re
 
 # PARAMETERS FOR PREPROCESSING
-saturation_thresh = 0.5
+saturation_thresh = 0.9
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
 noise_area_thresh = 200        # an int in : ignore ccs with area smaller than this

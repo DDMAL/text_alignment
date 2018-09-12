@@ -20,7 +20,7 @@ from collections import defaultdict
 reload(latinSyllabification)
 reload(preproc)
 reload(syl)
-reload(alignmentGA)
+# reload(alignmentGA)
 
 
 def bounding_box(cc_list):
@@ -145,14 +145,11 @@ def sigmoid(x):
 
 def normalize_projection(strip):
     proj = strip.projection_cols()
-    # med = np.median([x for x in proj if x > 1])
-    # clipped = np.clip(proj, 0, med)
-    # max_clip = max(clipped)
-    # clipped = [x / max_clip for x in clipped]
-    proj = [np.log(x + 1) for x in proj]
-    medlog = np.median([x for x in proj if x > 1])
-    proj = [np.floor(2 * x / medlog) for x in proj]
-    return proj
+    med = np.median([x for x in proj if x > 1])
+    clipped = np.clip(proj, 0, med)
+    max_clip = max(clipped)
+    clipped = [x / max_clip for x in clipped]
+    return clipped
 
 
 def pos_align_fitness(positions, syllables, line_projs, verbose=False):
@@ -242,16 +239,77 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
     return
 
 
-char_estimate_scale = 1
-overlap_allow = 0.7
-mut_prob = 0.01
-word_min_gap = 30
+def cc_scan_spacing(cc_lines_flat, lookahead=3):
+    spaces = []
+
+    # each entry in spaces[] will be the size of the space between the cc at position i and the
+    # cc at position i+1
+    for ind in range(len(cc_lines_flat) - 1):
+
+        left_cc = cc_lines_flat[ind]
+        left_contour = list(left_cc.contour_right())
+        left_range = [left_cc.offset_y, left_cc.offset_y + left_cc.nrows]
+
+        right_cc = cc_lines_flat[ind + 1]
+        right_range = [right_cc.offset_y, right_cc.offset_y + right_cc.nrows]
+        right_contour = list(right_cc.contour_left())
+
+        # pad the top of each contour
+        top_diff = left_range[0] - right_range[0]
+        if top_diff < 0:
+            right_contour = ([np.inf] * abs(top_diff)) + right_contour
+        elif top_diff > 0:
+            left_contour = ([np.inf] * abs(top_diff)) + left_contour
+
+        # pad the bottom of each contour
+        bottom_diff = left_range[1] - right_range[1]
+        if bottom_diff < 0:
+            left_contour = left_contour + ([np.inf] * abs(bottom_diff))
+        elif bottom_diff > 0:
+            right_contour = right_contour + ([np.inf] * abs(bottom_diff))
+
+        cc_bb_space = right_cc.offset_x - (left_cc.offset_x + left_cc.ncols)
+        cc_row_spacing = [left_contour[i] + right_contour[i] for i in range(len(left_contour))]
+        cc_row_spacing = [x + cc_bb_space for x in cc_row_spacing if not x == np.inf]
+        if not cc_row_spacing:
+            med = np.inf
+        else:
+            med = int(np.median(cc_row_spacing))
+        spaces.append(med)
+
+    return spaces
+
+
+def visualize_spacing(gap_sizes, cc_lines_flat, gamera_image, fname, size=20):
+
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+
+    for i, cc in enumerate(cc_lines_flat):
+
+        draw.rectangle([cc.ul.x, cc.ul.y, cc.lr.x, cc.lr.y],
+                        fill=None,
+                        outline='rgb(0, 0, 0)')
+
+        if i == len(cc_lines_flat) - 1:
+            continue
+
+        # draw estimated size of gap directly over gap
+        draw.text((int((cc.ul.x + cc.lr.x) / 2) , cc.ul.y - size),
+                    str(gap_sizes[i]),
+                    fill='rgb(0, 0, 0)',
+                    font=font)
+
+    image.save(fname)
+    
 
 if __name__ == '__main__':
-    #filename = 'salzinnes_18'
+    # filename = 'salzinnes_18'
     # filename = 'einsiedeln_003v'
-    filename = 'stgall390_07'
-    # filename = 'klosterneuburg_23v'
+    # filename = 'stgall390_24'
+    filename = 'klosterneuburg_23v'
 
     # def process`      (filename):
     print('processing ' + filename + '...')
@@ -301,40 +359,26 @@ if __name__ == '__main__':
     total_syl_length = sum([x.width for x in syllables])
     space_per_syl = int(float(strip_total_length - total_syl_length) / len(syllables))
 
+    lines_image = draw_lines(image, lines_peak_locs)
+    imsv(lines_image)
+
+    # two types of gaps;
+    # extreme minima within ccs, and gaps between ccs by the horizontal median scanning method
+
+    spaces = cc_scan_spacing(cc_lines_flat)
+    new_image = draw_lines(image, lines_peak_locs)
+    visualize_spacing(spaces, cc_lines_flat, new_image, 'testspacing.png')
+
+
+def jittering_method():
+
     print('precomputing convolutions...')
     convolutions = {}
     for width in set([s.width for s in syllables]):
         conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
         convolutions[width] = conv
 
-    plt.clf()
-    plt.figure(num=None, dpi=400, figsize=(50, 3))
-    pos = 0
-    for strip in cc_strips:
-        plt.axvline(pos)
-        pos += strip.ncols
-    plt.plot(line_projs_flat, c='black', linewidth=0.5)
-    plt.savefig("testplot.png")
 
-    # pop, log, hof = alignmentGA.run_GA(fitness_func, len(syllables), strip_total_length)
-    # graph_approach()
-    # visualize_pos_align(hof[0], syllables, image, cc_strips, 'testimg align.png')
-    # test_positions = [100, 101, 500, 700, 1200, 1400, 1700, 2300, 2500, 2800, 4900]
-    # res = pos_align_fitness(test_positions, syllables, line_projs)
-
-    f, t, Sxx = scipy.signal.spectrogram(np.array(line_projs_flat), nperseg=512, noverlap=256)
-
-    plt.clf()
-    plt.figure(num=None, dpi=400, figsize=(12, 12))
-    plt.pcolormesh(t, f, Sxx)
-    pos = 0
-    for strip in cc_strips:
-        plt.axvline(pos)
-        pos += strip.ncols
-    plt.savefig("testspectrogram.png")
-
-
-def jittering_method():
     sequence = [0]
 
     for syl in syllables[:-1]:
@@ -394,6 +438,13 @@ def jittering_method():
 
 # TEST WITH FORWARD CONVOLUTION
 def graph_approach():
+
+    print('precomputing convolutions...')
+    convolutions = {}
+    for width in set([s.width for s in syllables]):
+        conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
+        convolutions[width] = conv
+
     lookahead_pixels = 500
     branches_per_step = 3
     max_num_seqs = 100
