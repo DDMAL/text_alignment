@@ -18,20 +18,22 @@ noise_area_thresh = 200        # an int in : ignore ccs with area smaller than t
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
 prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
-collision_strip_size = 50       # in [0,inf]; amt of each cc to consider when clipping
-remove_capitals_scale = 70
+collision_strip_scale = 1       # in [0,inf]; amt of each cc to consider when clipping
+remove_capitals_scale = 10000   # removes large ccs. turned off for now
 
 # CC GROUPING (BLOBS)
 cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
 max_distance_to_staff = 200
 
 
-def vertically_coincide(hline_position, comp_offset, comp_nrows, collision=collision_strip_size):
+def vertically_coincide(hline_position, comp_offset, comp_nrows, collision, collision_scale=collision_strip_scale):
     """
     A helper function that takes in the vertical width of a horizontal strip
     and the vertical measurements of a connected component, and returns a value
     of True if any part of it lies within the strip.
     """
+
+    collision *= collision_strip_scale
 
     component_top = comp_offset
     component_bottom = comp_offset + comp_nrows
@@ -207,15 +209,17 @@ def identify_text_lines(image_bin):
     # using the peak locations found earlier, find all connected components that are intersected by
     # a horizontal strip at either edge of each line. these are the lines of text in the manuscript
     print('intersecting connected components with text lines...')
+    cc_median_height = np.median([x.nrows for x in components])
     cc_lines = []
     for line_loc in peak_locations:
-        res = [x for x in components if vertically_coincide(line_loc, x.offset_y, x.nrows)]
-        res = sorted(res, key=lambda x: x.offset_x)
+        res = [x for x in components if vertically_coincide(line_loc, x.offset_y, x.nrows, cc_median_height)]
+
+        # order ccs by x-coordinate of lower-right point
+        res = sorted(res, key=lambda cc: cc.lr.x)
         cc_lines.append(res)
 
     # if a single connected component appears in more than one cc_line, give priority to the line
     # that is closer to the center of the component's bounding box
-    # TODO: SOMETHING IS GOING VERY WRONG HERE????? LOOK AT FOLIO 12
     for n in range(len(cc_lines) - 1):
         intersect = set(cc_lines[n]) & set(cc_lines[n + 1])
 

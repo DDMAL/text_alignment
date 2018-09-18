@@ -153,7 +153,7 @@ def normalize_projection(strip):
 
 
 def pos_align_fitness(positions, syllables, line_projs, verbose=False):
-
+    word_min_gap = 30
     line_projs_flat = [item for sublist in line_projs for item in sublist]
     overlap_counter = [0] * (len(line_projs_flat) * 2)
 
@@ -219,7 +219,6 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
     font = pil.ImageFont.truetype('Arial.ttf', size=size)
 
     # from current position of projection, find position on page
-    position = 0
     for i, pos in enumerate(positions):
         end_pos = pos + syllables[i].width
         start_line, start_rel_pos = absolute_to_relative_pos(pos, strip_lengths)
@@ -233,13 +232,12 @@ def visualize_pos_align(positions, syllables, gamera_image, cc_strips, fname, si
 
         draw.line([start_pt, end_pt], fill='rgb(0, 0, 0)', width=5)
         draw.text(start_pt, syllables[i].text, fill='rgb(0, 0, 0)', font=font)
-        position = end_pos
 
     image.save(fname)
     return
 
 
-def cc_scan_spacing(cc_lines_flat, lookahead=3):
+def cc_scan_spacing(cc_lines_flat, image, max_lookahead=5):
     spaces = []
 
     # each entry in spaces[] will be the size of the space between the cc at position i and the
@@ -250,7 +248,20 @@ def cc_scan_spacing(cc_lines_flat, lookahead=3):
         left_contour = list(left_cc.contour_right())
         left_range = [left_cc.offset_y, left_cc.offset_y + left_cc.nrows]
 
-        right_cc = cc_lines_flat[ind + 1]
+        # keep looking forward until we reach a point where the next cc is behind left_cc OR we just
+        # reach the end of cc_lines_flat
+        lookahead = 1
+        while (lookahead < max_lookahead and
+                ind + lookahead < len(cc_lines_flat) and
+                cc_lines_flat[ind + lookahead].lr.x > left_cc.ul.x):
+            lookahead += 1
+
+        if lookahead >= 2:
+            ul, lr = bounding_box(cc_lines_flat[ind + 1:ind + lookahead])
+            right_cc = image.subimage(ul, lr)
+        else:
+            right_cc = cc_lines_flat[ind + 1]
+
         right_range = [right_cc.offset_y, right_cc.offset_y + right_cc.nrows]
         right_contour = list(right_cc.contour_left())
 
@@ -268,19 +279,33 @@ def cc_scan_spacing(cc_lines_flat, lookahead=3):
         elif bottom_diff > 0:
             right_contour = right_contour + ([np.inf] * abs(bottom_diff))
 
+        # horizontal space between the two ccs' bounding boxes
         cc_bb_space = right_cc.offset_x - (left_cc.offset_x + left_cc.ncols)
+
+        # add contours of left and right to get space between them
         cc_row_spacing = [left_contour[i] + right_contour[i] for i in range(len(left_contour))]
         cc_row_spacing = [x + cc_bb_space for x in cc_row_spacing if not x == np.inf]
-        if not cc_row_spacing:
-            med = np.inf
-        else:
+        if cc_row_spacing:
             med = int(np.median(cc_row_spacing))
-        spaces.append(med)
+            med = max(med, 0)
+            spaces.append(med)
+            continue
+
+        # if not cc_row_spacing then the two ccs do not overlap horizontally
+        # check to see if they overlap vertically
+
+        left_midpoint = left_cc.offset_x + int(left_cc.ncols / 2)
+        right_midpoint = right_cc.offset_x + int(right_cc.ncols / 2)
+        diff = right_midpoint - left_midpoint
+        if diff >= 0:
+            spaces.append(diff)
+        else:
+            spaces.append(np.inf)
 
     return spaces
 
 
-def visualize_spacing(gap_sizes, cc_lines_flat, gamera_image, fname, size=20):
+def visualize_spacing(gap_sizes, cc_lines_flat, gamera_image, fname, size=14):
 
     gamera_image.save_image(fname)
     image = pil.Image.open(fname)
@@ -289,29 +314,25 @@ def visualize_spacing(gap_sizes, cc_lines_flat, gamera_image, fname, size=20):
 
     for i, cc in enumerate(cc_lines_flat):
 
-        draw.rectangle([cc.ul.x, cc.ul.y, cc.lr.x, cc.lr.y],
-                        fill=None,
-                        outline='rgb(0, 0, 0)')
+        draw.rectangle([cc.ul.x, cc.ul.y, cc.lr.x, cc.lr.y], fill=None, outline='rgb(0, 0, 0)')
 
         if i == len(cc_lines_flat) - 1:
             continue
 
         # draw estimated size of gap directly over gap
-        draw.text((int((cc.ul.x + cc.lr.x) / 2) , cc.ul.y - size),
-                    str(gap_sizes[i]),
-                    fill='rgb(0, 0, 0)',
-                    font=font)
+        draw.text((int((cc.ul.x + cc.lr.x) / 2), cc.ul.y - size), str(gap_sizes[i]), fill='rgb(0, 0, 0)', font=font)
 
     image.save(fname)
-    
+
+
+char_estimate_scale = 1.1
 
 if __name__ == '__main__':
-    # filename = 'salzinnes_18'
+    filename = 'salzinnes_11'
     # filename = 'einsiedeln_003v'
     # filename = 'stgall390_24'
-    filename = 'klosterneuburg_23v'
+    # filename = 'klosterneuburg_23v'
 
-    # def process`      (filename):
     print('processing ' + filename + '...')
 
     raw_image = gc.load_image('./png/' + filename + '_text.png')
@@ -323,7 +344,7 @@ if __name__ == '__main__':
 
     image, staff_image = preproc.preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
-    cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
+    # cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
     cc_strips = [union_images(line) for line in cc_lines]
     line_projs = [normalize_projection(x) for x in cc_strips]
 
@@ -343,14 +364,19 @@ if __name__ == '__main__':
         total_black += cc.black_area()[0]
 
     avg_char_length = int((total_width / total_num_letters) * char_estimate_scale)
+    avg_char_area = int(total_black / total_num_letters)
 
+    words_end = [0] + words_begin[:-1]
     syllables = []
     for i in range(len(transcript_string)):
         width = avg_char_length * len(transcript_string[i])
+        area = avg_char_area * len(transcript_string[i])
         syllables.append(syl.Syllable(
             text=transcript_string[i],
             word_begin=words_begin[i],
-            width=width)
+            word_end=words_end[i],
+            width=width,
+            area=area)
             )
 
     fitness_func = functools.partial(pos_align_fitness, syllables=syllables, line_projs=line_projs)
@@ -365,7 +391,7 @@ if __name__ == '__main__':
     # two types of gaps;
     # extreme minima within ccs, and gaps between ccs by the horizontal median scanning method
 
-    spaces = cc_scan_spacing(cc_lines_flat)
+    spaces = cc_scan_spacing(cc_lines_flat, image)
     new_image = draw_lines(image, lines_peak_locs)
     visualize_spacing(spaces, cc_lines_flat, new_image, 'testspacing.png')
 
@@ -377,7 +403,6 @@ def jittering_method():
     for width in set([s.width for s in syllables]):
         conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
         convolutions[width] = conv
-
 
     sequence = [0]
 
