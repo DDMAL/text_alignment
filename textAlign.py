@@ -325,13 +325,38 @@ def visualize_spacing(gap_sizes, cc_lines_flat, gamera_image, fname, size=14):
     image.save(fname)
 
 
+def visualize_alignment(sequence, gamera_image, fname, size=20):
+
+    gamera_image.save_image(fname)
+    image = pil.Image.open(fname)
+    draw = pil.ImageDraw.Draw(image)
+    font = pil.ImageFont.truetype('Arial.ttf', size=size)
+
+    cc_groups = sequence.cc_groups
+    syl_groups = sequence.syl_groups
+
+    for i in range(len(cc_groups)):
+
+        cur_ccs = cc_groups[i]
+        cur_syls = syl_groups[i]
+        ul, lr = bounding_box(cur_ccs)
+
+        draw.rectangle([ul.x, ul.y, lr.x, lr.y], fill=None, outline='rgb(0, 0, 0)')
+
+        syl_text = '-'.join([x.text for x in cur_syls])
+        syl_text = str(len(cur_ccs)) + ',' + str(len(cur_syls)) + ' ' + syl_text
+        draw.text((ul.x, ul.y - size), syl_text, fill='rgb(0, 0, 0)', font=font)
+
+    image.save(fname)
+
+
 char_estimate_scale = 1.1
 
 if __name__ == '__main__':
-    filename = 'salzinnes_11'
+    # filename = 'salzinnes_11'
     # filename = 'einsiedeln_003v'
     # filename = 'stgall390_24'
-    # filename = 'klosterneuburg_23v'
+    filename = 'klosterneuburg_23v'
 
     print('processing ' + filename + '...')
 
@@ -379,162 +404,83 @@ if __name__ == '__main__':
             area=area)
             )
 
-    fitness_func = functools.partial(pos_align_fitness, syllables=syllables, line_projs=line_projs)
     strip_total_length = sum([x.ncols for x in cc_strips])
-    line_projs_flat = [item for sublist in line_projs for item in sublist]
-    total_syl_length = sum([x.width for x in syllables])
-    space_per_syl = int(float(strip_total_length - total_syl_length) / len(syllables))
-
-    lines_image = draw_lines(image, lines_peak_locs)
-    imsv(lines_image)
-
-    # two types of gaps;
-    # extreme minima within ccs, and gaps between ccs by the horizontal median scanning method
 
     spaces = cc_scan_spacing(cc_lines_flat, image)
     new_image = draw_lines(image, lines_peak_locs)
     visualize_spacing(spaces, cc_lines_flat, new_image, 'testspacing.png')
 
+    # BEGIN BRANCHING PROCEDURE
 
-def jittering_method():
+    sequences = [syl.AlignSequence()]
+    # each sequence is a list of dicts each with three entries:
+    # 'syl_groups' references the list of syllables for this element (0 to max_syls_per_element)
+    # 'cc_groups' is the list of ccs that comprise this syllable (0 to forward_branches)
+    # 'cost' is the cost associated with taking these ccs to estimate these syllables
 
-    print('precomputing convolutions...')
-    convolutions = {}
-    for width in set([s.width for s in syllables]):
-        conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
-        convolutions[width] = conv
+    max_syls_per_element = 2
+    max_ccs_per_element = 7
+    max_sequences = 500
 
-    sequence = [0]
+    for step in range(2000):
+        print('len seqs ' + str(len(sequences)))
+        # get lowest (head, ccnums) for all sequences
+        positions = [(x.last_cc_index(), x.last_syl_index()) for x in sequences]
+        lowest_seq_pos = min(positions)
 
-    for syl in syllables[:-1]:
-        sequence.append(sequence[-1] + syl.width + space_per_syl)
+        # find the best sequence in the lowest position and retain it for branching. remove all
+        # other sequences with lowest position and discard them
+        equiv_sequences = [x for x in sequences if (x.last_cc_index(), x.last_syl_index()) == lowest_seq_pos]
+        best_seq = min(equiv_sequences, key=lambda x: sum(x.costs))
 
-    max_num_seqs = 35
+        print('removing {}'.format(len(equiv_sequences)))
+        for seq in equiv_sequences:
+            sequences.remove(seq)
 
-    sequences = [sequence[:] for x in range(max_num_seqs)]
+        next_cc_ind = best_seq.last_cc_index() + 1
+        next_syl_ind = best_seq.last_syl_index() + 1
 
-    counter = 0
-    syl_orders = [None] * max_num_seqs
-    for step in range(len(syllables) * 1000):
-        if counter % len(syllables) == 0:
-            counter = 0
-            fitnesses = [pos_align_fitness(s, syllables, line_projs)[0] for s in sequences]
-            print([round(x) for x in fitnesses])
-            med_fit = np.median(fitnesses)
-            max_fit_ind = fitnesses.index(max(fitnesses))
+        this_max_ccs = min(max_ccs_per_element, len(cc_lines_flat) - next_cc_ind)
+        this_max_syls = min(max_syls_per_element, len(syllables) - next_syl_ind)
 
-            for i in range(max_num_seqs):
-                if fitnesses[i] < med_fit:
-                    sequences[i] = list(sequences[max_fit_ind])
+        # get pairs of (num ccs, num syls) to define new elements to append to this one
+        arrangements = iter.product(range(1, this_max_ccs + 1), range(this_max_syls + 1))
 
-                syl_orders[i] = list(range(len(syllables)))
-                np.random.shuffle(syl_orders[i])
+        for i in arrangements:
+            num_syls = i[1]
+            num_ccs = i[0]
+            add_cc_group = cc_lines_flat[next_cc_ind:next_cc_ind + num_ccs]
+            add_spaces = spaces[next_cc_ind:next_cc_ind + num_ccs]
+            add_syl_group = syllables[next_syl_ind:next_syl_ind + num_syls]
 
-        for i, sequence in enumerate(sequences):
-            cur_ind = syl_orders[i][counter]
-            cur_syl = syllables[cur_ind]
-            if cur_ind == 0:
-                left_bound = 0
-            else:
-                left_bound = sequence[cur_ind - 1] + int(syllables[cur_ind - 1].width * overlap_allow)
+            # a syllable that starts a word must be at the beginning of a syl group, and one that
+            # ends a word must be at the END of a syl group. if this is not the case, then skip
+            # this possible arrangement
 
-            if cur_ind == len(syllables) - 1:
-                right_bound = strip_total_length
-            else:
-                right_bound = sequence[cur_ind + 1] - int(cur_syl.width * overlap_allow)
-                if words_begin[cur_ind + 1]:
-                    right_bound -= 50
-
-            if left_bound >= right_bound:
+            syl_begins = [x.word_begin for x in add_syl_group]
+            syl_ends = [x.word_end for x in add_syl_group]
+            if any(syl_begins[1:]) or any(syl_ends[:-1]):
+                # print('begin / end violation')
                 continue
 
-            if np.random.uniform() > mut_prob:
-                convolve_slice = convolutions[cur_syl.width][left_bound:right_bound]
-                target_ind = convolve_slice.index(max(convolve_slice))
-                target_ind += left_bound
-            else:
-                target_ind = np.random.randint(left_bound, right_bound)
+            # make a new sequence out of this branched one
+            cost = syl.get_cost_of_element(add_cc_group, add_syl_group, add_spaces)
+            new_cc_groups = best_seq.cc_groups + [add_cc_group]
+            new_syl_groups = best_seq.syl_groups + [add_syl_group]
+            new_costs = best_seq.costs + [cost]
 
-            sequences[i][cur_ind] = target_ind
-        counter += 1
+            new_seq = syl.AlignSequence(syl_groups=new_syl_groups,
+                                        cc_groups=new_cc_groups,
+                                        costs=new_costs)
 
-    visualize_pos_align(sequences[0], syllables, image, cc_strips, 'testimg align.png')
+            sequences.append(new_seq)
+
+            if len(sequences) <= max_sequences:
+                continue
+
+            sequences.sort(key=lambda x: np.average(x.costs))
+            sequences = sequences[:max_sequences]
 
 
-# TEST WITH FORWARD CONVOLUTION
-def graph_approach():
 
-    print('precomputing convolutions...')
-    convolutions = {}
-    for width in set([s.width for s in syllables]):
-        conv = [sum(line_projs_flat[i:i+width]) for i in range(strip_total_length)]
-        convolutions[width] = conv
-
-    lookahead_pixels = 500
-    branches_per_step = 3
-    max_num_seqs = 100
-
-    completed_sequences = []
-    dead_sequences = []
-    seqs = [syl.AlignSequence(positions=[])]
-
-    for step in range(1000000):
-
-        if not seqs:
-            print('finished branching.')
-            break
-
-        print(step, len(seqs), max([x.score for x in seqs + completed_sequences]), len(completed_sequences))
-        this_equiv = seqs[0].equivalence()
-
-        equivalent_seqs = [s for s in seqs if s.equivalence() == this_equiv]
-        current_seq = max(equivalent_seqs, key=lambda x: x.score)
-
-        # remove equivalent seqs; we only care about the one with highest score
-        print('removing ' + str(len(equivalent_seqs)) + ' from class ' + str(this_equiv))
-        for seq in equivalent_seqs:
-            seqs.remove(seq)
-
-        if len(syllables) == len(current_seq.positions):
-            current_seq.completed = True
-            completed_sequences.append(current_seq)
-            continue
-
-        current_head = current_seq.head()
-        width = syllables[len(current_seq.positions)].width
-        convolve_slice = convolutions[width][current_head:current_head + lookahead_pixels]
-
-        # get the most prominent peaks in the lookahead interval of the convolution
-        # if there aren't enough peaks, look further
-        # if there are 0 peaks all the way to the end, this sequence is dead.
-        peaks = []
-        count = 0
-        while (len(peaks) < branches_per_step and
-                current_head + (lookahead_pixels * count) < strip_total_length):
-            count += 1
-            convolve_slice = convolutions[width][current_head:current_head + (lookahead_pixels * count)]
-            peaks = preproc.find_peak_locations(convolve_slice, 0, ranked=True)
-
-        if not peaks:
-            print("sequence dead", count, current_head, len(current_seq.positions))
-            dead_sequences.append(current_seq)
-            continue
-
-        # adding current_head here to make sure we're correctly aligned with the global line projection
-        next_locs = [x[0] + current_head for x in peaks[:branches_per_step]]
-
-        # make new sequences using the next_locs, evaluate their scores, and insert them into the sequence
-        # list, using bisect to keep it sorted so that the ones with the lowest head() are always first
-        for loc in next_locs:
-            new_seq = syl.AlignSequence(positions=current_seq.positions + [loc])
-            new_seq.score = pos_align_fitness(new_seq.positions, syllables, line_projs)[0]
-            keys = [s.head() for s in seqs]
-            ind = bisect.bisect_left(keys, loc)
-            seqs.insert(ind, new_seq)
-
-        if len(seqs) > max_num_seqs:
-            scores = sorted([x.score for x in seqs], reverse=True)
-            seqs = [x for x in seqs if x.score > scores[max_num_seqs]]
-
-    best_seq = max(completed_sequences + dead_sequences, key=lambda x: x.score)
-    visualize_pos_align(best_seq.positions, syllables, image, cc_strips, 'testimg align.png')
+    visualize_alignment(sequences[0], new_image, 'testalign.png')
