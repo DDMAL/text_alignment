@@ -51,3 +51,16 @@ def get_cost_of_element(cc_group, syl_group, spaces):
         cost = max(0, cost - spaces[-1])
 
     return round(cost, 3)
+
+def make_align_seq_from_path(path, cc_lines_flat, syllables):
+    cc_groups = []
+    syl_groups = []
+
+    for i in range(len(path) - 1):
+        start_node = path[i]
+        end_node = path[i+1]
+
+        cc_groups.append(cc_lines_flat[start_node[0]:end_node[0]])
+        syl_groups.append(syllables[start_node[1]:end_node[1]])
+
+    return AlignSequence(cc_groups=cc_groups,syl_groups=syl_groups)

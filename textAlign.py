@@ -12,6 +12,7 @@ import bisect
 import latinSyllabification
 import textAlignPreprocessing as preproc
 from os.path import isfile, join
+import networkx as nx
 import numpy as np
 import syllable as syl
 import PIL as pil
@@ -421,66 +422,101 @@ if __name__ == '__main__':
     max_syls_per_element = 2
     max_ccs_per_element = 7
     max_sequences = 500
+    diag_tol = 25
 
-    for step in range(2000):
-        print('len seqs ' + str(len(sequences)))
-        # get lowest (head, ccnums) for all sequences
-        positions = [(x.last_cc_index(), x.last_syl_index()) for x in sequences]
-        lowest_seq_pos = min(positions)
+    # for step in range(2000):
+    #     print('len seqs ' + str(len(sequences)))
+    #     # get lowest (head, ccnums) for all sequences
+    #     positions = [(x.last_cc_index(), x.last_syl_index()) for x in sequences]
+    #     lowest_seq_pos = min(positions)
+    #
+    #     # find the best sequence in the lowest position and retain it for branching. remove all
+    #     # other sequences with lowest position and discard them
+    #     equiv_sequences = [x for x in sequences if (x.last_cc_index(), x.last_syl_index()) == lowest_seq_pos]
+    #     best_seq = min(equiv_sequences, key=lambda x: sum(x.costs))
+    #
+    #     print('removing {}'.format(len(equiv_sequences)))
+    #     for seq in equiv_sequences:
+    #         sequences.remove(seq)
+    #
+    #     next_cc_ind = best_seq.last_cc_index() + 1
+    #     next_syl_ind = best_seq.last_syl_index() + 1
+    #
+    #     this_max_ccs = min(max_ccs_per_element, len(cc_lines_flat) - next_cc_ind)
+    #     this_max_syls = min(max_syls_per_element, len(syllables) - next_syl_ind)
+    #
+    #     # get pairs of (num ccs, num syls) to define new elements to append to this one
+    #     arrangements = iter.product(range(1, this_max_ccs + 1), range(this_max_syls + 1))
+    #
+    #     for i in arrangements:
+    #         num_syls = i[1]
+    #         num_ccs = i[0]
+    #         add_cc_group = cc_lines_flat[next_cc_ind:next_cc_ind + num_ccs]
+    #         add_spaces = spaces[next_cc_ind:next_cc_ind + num_ccs]
+    #         add_syl_group = syllables[next_syl_ind:next_syl_ind + num_syls]
+    #
+    #         # a syllable that starts a word must be at the beginning of a syl group, and one that
+    #         # ends a word must be at the END of a syl group. if this is not the case, then skip
+    #         # this possible arrangement
+    #
+    #         syl_begins = [x.word_begin for x in add_syl_group]
+    #         syl_ends = [x.word_end for x in add_syl_group]
+    #         if any(syl_begins[1:]) or any(syl_ends[:-1]):
+    #             # print('begin / end violation')
+    #             continue
+    #
+    #         # make a new sequence out of this branched one
+    #         cost = syl.get_cost_of_element(add_cc_group, add_syl_group, add_spaces)
+    #         new_cc_groups = best_seq.cc_groups + [add_cc_group]
+    #         new_syl_groups = best_seq.syl_groups + [add_syl_group]
+    #         new_costs = best_seq.costs + [cost]
+    #
+    #         new_seq = syl.AlignSequence(syl_groups=new_syl_groups,
+    #                                     cc_groups=new_cc_groups,
+    #                                     costs=new_costs)
+    #
+    #         sequences.append(new_seq)
+    #
+    #         if len(sequences) <= max_sequences:
+    #             continue
+    #
+    #         sequences.sort(key=lambda x: np.average(x.costs))
+    #         sequences = sequences[:max_sequences]
+    # visualize_alignment(sequences[0], new_image, 'testalign.png')
 
-        # find the best sequence in the lowest position and retain it for branching. remove all
-        # other sequences with lowest position and discard them
-        equiv_sequences = [x for x in sequences if (x.last_cc_index(), x.last_syl_index()) == lowest_seq_pos]
-        best_seq = min(equiv_sequences, key=lambda x: sum(x.costs))
+    num_ccs = len(cc_lines_flat)
+    num_syls = len(syllables)
+    nodes = iter.product(range(num_ccs), range(num_syls))
+    slope = float(num_syls) / num_ccs
 
-        print('removing {}'.format(len(equiv_sequences)))
-        for seq in equiv_sequences:
-            sequences.remove(seq)
+    nodes = [x for x in nodes if abs(slope * x[0] - x[1]) < diag_tol]
 
-        next_cc_ind = best_seq.last_cc_index() + 1
-        next_syl_ind = best_seq.last_syl_index() + 1
+    g = nx.DiGraph()
+    g.add_nodes_from(nodes)
+    # for each node in nodes, connect it to the succeeding rectangle
+    print('building graph...')
+    for i, node in enumerate(nodes):
 
-        this_max_ccs = min(max_ccs_per_element, len(cc_lines_flat) - next_cc_ind)
-        this_max_syls = min(max_syls_per_element, len(syllables) - next_syl_ind)
+        if i % 1000 == 0:
+            print('    branching node {} of {}...').format(i, len(nodes))
 
-        # get pairs of (num ccs, num syls) to define new elements to append to this one
-        arrangements = iter.product(range(1, this_max_ccs + 1), range(this_max_syls + 1))
+        # nodes in @node's successor rectangle. using <= for syllables, because it is possible to
+        # assign 0 syllables to an element, whereas at least 1 cc must be in each element
+        successor_nodes = [x for x in nodes if
+            (0 < x[0] - node[0] <= max_ccs_per_element) and
+            (0 <= x[1] - node[1] <= max_syls_per_element)]
 
-        for i in arrangements:
-            num_syls = i[1]
-            num_ccs = i[0]
-            add_cc_group = cc_lines_flat[next_cc_ind:next_cc_ind + num_ccs]
-            add_spaces = spaces[next_cc_ind:next_cc_ind + num_ccs]
-            add_syl_group = syllables[next_syl_ind:next_syl_ind + num_syls]
+        edges = []
+        for n in successor_nodes:
+            ccs = cc_lines_flat[node[0]:n[0]]
+            sps = spaces[node[0]:n[0]]
+            syls = syllables[node[1]:n[1]]
 
-            # a syllable that starts a word must be at the beginning of a syl group, and one that
-            # ends a word must be at the END of a syl group. if this is not the case, then skip
-            # this possible arrangement
+            cost = syl.get_cost_of_element(ccs, syls, sps)
+            edges.append((node, n, cost))
 
-            syl_begins = [x.word_begin for x in add_syl_group]
-            syl_ends = [x.word_end for x in add_syl_group]
-            if any(syl_begins[1:]) or any(syl_ends[:-1]):
-                # print('begin / end violation')
-                continue
+        g.add_weighted_edges_from(edges)
 
-            # make a new sequence out of this branched one
-            cost = syl.get_cost_of_element(add_cc_group, add_syl_group, add_spaces)
-            new_cc_groups = best_seq.cc_groups + [add_cc_group]
-            new_syl_groups = best_seq.syl_groups + [add_syl_group]
-            new_costs = best_seq.costs + [cost]
-
-            new_seq = syl.AlignSequence(syl_groups=new_syl_groups,
-                                        cc_groups=new_cc_groups,
-                                        costs=new_costs)
-
-            sequences.append(new_seq)
-
-            if len(sequences) <= max_sequences:
-                continue
-
-            sequences.sort(key=lambda x: np.average(x.costs))
-            sequences = sequences[:max_sequences]
-
-
-
-    visualize_alignment(sequences[0], new_image, 'testalign.png')
+    path = nx.dijkstra_path(g, (0, 0), max(nodes))
+    best_seq = syl.make_align_seq_from_path(path, cc_lines_flat, syllables)
+    visualize_alignment(best_seq, image, 'testalign.png')
