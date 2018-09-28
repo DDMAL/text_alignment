@@ -3,6 +3,7 @@ gamera-3.4.3*
 CF-*
 testimg*
 testplot*
+testspacing*
 png/
 .DS_Store
 alignenv/

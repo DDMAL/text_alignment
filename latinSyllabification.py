@@ -80,7 +80,7 @@ def parse_transcript(filename, syllabify=True):
         line = line.replace('.', '')
         line = line.strip(' \t\n\r')
         words = [syllabify_word(x) for x in re.compile(' ').split(line)]
-        words[0] = '*' + words[0][1:]
+        # words[0] = '*' + words[0][1:]
         text = text + ' '.join(words) + ' '
 
     text = text.strip(' \t\n\r')

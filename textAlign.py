@@ -48,8 +48,10 @@ def imsv(img, fname="testimg.png"):
         img.save_image(fname)
 
 
-def plot(inp):
+def plot(inp, srt=False):
     plt.clf()
+    if srt:
+        inp = sorted(inp)
     plt.figure(num=None, dpi=400, figsize=(30, 3))
     plt.plot(inp, c='black', linewidth=0.5)
     plt.savefig("testplot.png")
@@ -372,29 +374,33 @@ if __name__ == '__main__':
 
     image, staff_image = preproc.preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
-    # cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
+    cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
     cc_strips = [union_images(line) for line in cc_lines]
     line_projs = [normalize_projection(x) for x in cc_strips]
+
+    cc_lines_flat = [item for sublist in cc_lines for item in sublist]
 
     # transcript_string contains each syllable. words_begin is 1 for every syllable that begins a
     # word and 0 for every syllable that does not
     transcript_string, words_begin = latinSyllabification.parse_transcript(
             './png/' + filename + '_transcript.txt')
 
-    total_num_letters = sum([len(x) for x in transcript_string])
+    num_ccs = len(cc_lines_flat)
+    num_syls = len(syllables)
 
     # estimate width and volume of a single letter on average
-    cc_lines_flat = [item for sublist in cc_lines for item in sublist]
+    total_num_letters = sum([len(x) for x in transcript_string])
+    median_area = np.median([x.black_area()[0] for x in cc_lines_flat])
     total_black = 0
     total_width = 0
     for cc in cc_lines_flat:
         total_width += cc.ncols
-        total_black += cc.black_area()[0]
+        total_black += min(cc.black_area()[0], median_area)
 
     avg_char_length = int((total_width / total_num_letters) * char_estimate_scale)
     avg_char_area = int(total_black / total_num_letters)
 
-    words_end = [0] + words_begin[:-1]
+    words_end = words_begin[1:] + [1]
     syllables = []
     for i in range(len(transcript_string)):
         width = avg_char_length * len(transcript_string[i])
@@ -410,19 +416,13 @@ if __name__ == '__main__':
     strip_total_length = sum([x.ncols for x in cc_strips])
 
     spaces = cc_scan_spacing(cc_lines_flat, image)
+    median_space = np.median(spaces)
+
     new_image = draw_lines(image, lines_peak_locs)
     visualize_spacing(spaces, cc_lines_flat, new_image, 'testspacing.png')
 
-    # BEGIN BRANCHING PROCEDURE
-
-    sequences = [syl.AlignSequence()]
-    # each sequence is a list of dicts each with three entries:
-    # 'syl_groups' references the list of syllables for this element (0 to max_syls_per_element)
-    # 'cc_groups' is the list of ccs that comprise this syllable (0 to forward_branches)
-    # 'cost' is the cost associated with taking these ccs to estimate these syllables
-
     max_syls_per_element = 2
-    max_ccs_per_element = 7
+    max_ccs_per_element = 10
     max_sequences = 500
     diag_tol = 15
 
@@ -486,8 +486,6 @@ if __name__ == '__main__':
     #         sequences = sequences[:max_sequences]
     # visualize_alignment(sequences[0], new_image, 'testalign.png')
 
-    num_ccs = len(cc_lines_flat)
-    num_syls = len(syllables)
     nodes = iter.product(range(num_ccs), range(num_syls))
     slope = float(num_syls) / num_ccs
 
@@ -498,8 +496,6 @@ if __name__ == '__main__':
     # for each node in nodes, connect it to the succeeding rectangle
     print('building graph...')
 
-    # integrate into building graph: WORD_BEGIN syllables can only be at the BEGINNING of elements,
-    # and WORD_END syllables can only be at the END of elements.
     for i, node in enumerate(nodes):
 
         if i % 1000 == 0:
@@ -517,16 +513,19 @@ if __name__ == '__main__':
             sps = spaces[node[0]:n[0]]
             syls = syllables[node[1]:n[1]]
 
+            # WORD_BEGIN syllables can only be at the BEGINNING of elements,
+            # and WORD_END syllables can only be at the END of elements.
             if len(syls) > 1 and \
-                (any(x.word_begin for x in syls[1:]) or \
-                any(x.word_end for x in syls[:-1])):
+                    (any(x.word_begin for x in syls[1:]) or
+                    any(x.word_end for x in syls[:-1])):
                 continue
 
-            cost = syl.get_cost_of_element(ccs, syls, sps)
+            cost = syl.get_cost_of_element(ccs, syls, sps, median_area, median_space)
             edges.append((node, n, cost))
 
         g.add_weighted_edges_from(edges)
 
+    print('finding optimal path thru graph...')
     path = nx.dijkstra_path(g, (0, 0), max(nodes))
     best_seq = syl.make_align_seq_from_path(path, cc_lines_flat, syllables, spaces)
     visualize_alignment(best_seq, image, 'testalign.png')
