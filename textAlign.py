@@ -335,6 +335,7 @@ def visualize_alignment(sequence, gamera_image, fname, size=20):
 
     cc_groups = sequence.cc_groups
     syl_groups = sequence.syl_groups
+    costs = sequence.costs
 
     for i in range(len(cc_groups)):
 
@@ -346,18 +347,19 @@ def visualize_alignment(sequence, gamera_image, fname, size=20):
 
         syl_text = '-'.join([x.text for x in cur_syls])
         syl_text = str(len(cur_ccs)) + ',' + str(len(cur_syls)) + ' ' + syl_text
-        draw.text((ul.x, ul.y - size), syl_text, fill='rgb(0, 0, 0)', font=font)
+        syl_text = str(costs[i]) + '\n' + syl_text
+        draw.text((ul.x, ul.y - size*2), syl_text, fill='rgb(0, 0, 0)', font=font)
 
     image.save(fname)
 
 
-char_estimate_scale = 1.1
+char_estimate_scale = 2
 
 if __name__ == '__main__':
     # filename = 'salzinnes_11'
     # filename = 'einsiedeln_003v'
-    # filename = 'stgall390_24'
-    filename = 'klosterneuburg_23v'
+    filename = 'stgall390_24'
+    # filename = 'klosterneuburg_23v'
 
     print('processing ' + filename + '...')
 
@@ -422,7 +424,7 @@ if __name__ == '__main__':
     max_syls_per_element = 2
     max_ccs_per_element = 7
     max_sequences = 500
-    diag_tol = 25
+    diag_tol = 15
 
     # for step in range(2000):
     #     print('len seqs ' + str(len(sequences)))
@@ -495,6 +497,9 @@ if __name__ == '__main__':
     g.add_nodes_from(nodes)
     # for each node in nodes, connect it to the succeeding rectangle
     print('building graph...')
+
+    # integrate into building graph: WORD_BEGIN syllables can only be at the BEGINNING of elements,
+    # and WORD_END syllables can only be at the END of elements.
     for i, node in enumerate(nodes):
 
         if i % 1000 == 0:
@@ -512,11 +517,16 @@ if __name__ == '__main__':
             sps = spaces[node[0]:n[0]]
             syls = syllables[node[1]:n[1]]
 
+            if len(syls) > 1 and \
+                (any(x.word_begin for x in syls[1:]) or \
+                any(x.word_end for x in syls[:-1])):
+                continue
+
             cost = syl.get_cost_of_element(ccs, syls, sps)
             edges.append((node, n, cost))
 
         g.add_weighted_edges_from(edges)
 
     path = nx.dijkstra_path(g, (0, 0), max(nodes))
-    best_seq = syl.make_align_seq_from_path(path, cc_lines_flat, syllables)
+    best_seq = syl.make_align_seq_from_path(path, cc_lines_flat, syllables, spaces)
     visualize_alignment(best_seq, image, 'testalign.png')
