@@ -146,7 +146,7 @@ def moving_avg_filter(data, filter_size=filter_size):
 
 def preprocess_images(input_image, staff_image=None,
                     sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
-                    despeckle_amt=despeckle_amt, filter_runs=3, filter_runs_amt=5):
+                    despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=1):
 
     image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
     image_bin = input_image.to_onebit().subtract_images(image_sats)

@@ -48,7 +48,7 @@ def get_cost_of_element(cc_group, syl_group, spaces, median_area, median_space, 
     # THAT IS ALL
 
     median_area *= scale
-    median_space *= scale
+    # median_space *= scale
 
     cc_area = sum(min(x.black_area()[0], median_area) for x in cc_group)
     syl_area = sum(x.area for x in syl_group)

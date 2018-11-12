@@ -37,6 +37,11 @@ def bounding_box(cc_list):
     return ul, lr
 
 
+def disp(image):
+    image.to_greyscale().to_pil().show()
+    return
+
+
 def imsv(img, fname="testimg.png"):
     if type(img) == list:
         union_images(img).save_image(fname)
@@ -182,9 +187,11 @@ def visualize_alignment(sequence, gamera_image, fname, size=20):
 
 
 if __name__ == '__main__':
-    # filename = 'salzinnes_11'
-    # filename = 'einsiedeln_003v'
-    filename = 'stgall390_23'
+    filename = 'salzinnes_25'
+
+    # filename = 'einsiedeln_001v'
+    # filename = 'stgall390_25'
+    # filename = 'stmaurf_49r'
     # filename = 'klosterneuburg_23v'
 
     print('processing ' + filename + '...')
@@ -198,7 +205,7 @@ if __name__ == '__main__':
 
     image, staff_image = preproc.preprocess_images(raw_image, staff_image)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
-    cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
+    # cc_lines = preproc.find_ccs_under_staves(cc_lines, staff_image)
     cc_strips = [union_images(line) for line in cc_lines]
 
     cc_lines_flat = [item for sublist in cc_lines for item in sublist]
