@@ -3,14 +3,15 @@ from unidecode import unidecode
 import matplotlib.pyplot as plt
 
 def read_file(fname):
-    file = open(fname, 'r', encoding='utf8')
+    file = open(fname, 'r')
     lines = file.readlines()
     file.close()
     lines = ' '.join(lines)
     lines = lines.replace('\n', '')
-    lines = unidecode(lines)
+    lines = lines.replace('\r', '')
+    lines = lines.replace('| ', '')
+    # lines = unidecode(lines)
     return lines
-
 
 # scoring system
 match = 4
@@ -19,8 +20,8 @@ gap_open = -4
 gap_extend = -4
 
 gap_open_x = -4
-gap_extend_x = -4
-gap_open_y = -4
+gap_extend_x = -0
+gap_open_y = -8
 gap_extend_y = -4
 
 # display length
@@ -33,10 +34,7 @@ files = ['einsiedeln_001r', 'einsiedeln_001v', 'einsiedeln_002r',
     'stmaurf_49r']
 
 
-def process(item):
-    print('processing ' + item + '...')
-    transcript = read_file('./txt/' + item + '_transcript.txt')
-    ocr = read_file('./txt/' + item + '_ocr.txt')
+def process(transcript, ocr):
 
     # transcript = 'dafsad'
     # ocr = 'dfasd'
@@ -124,7 +122,7 @@ def process(item):
             tra_align += transcript[xpt - 1]
             ocr_align += '_'
             added_text = transcript[xpt] + ' _'
-            print(mpt, xpt, ypt, added_text)
+            # print(mpt, xpt, ypt, added_text)
 
             align_record += ' '
             mpt = x_mat_ptr[xpt][ypt]
@@ -148,9 +146,9 @@ def process(item):
     pt_record = pt_record[::-1]
 
     # log results
-    file = open('./results/' + item + '_result.txt', 'w+')
-    file.seek(0)
-    file.truncate()
+    # file = open('./results/' + item + '_result.txt', 'w+')
+    # file.seek(0)
+    # file.truncate()
     for n in range(int(np.ceil(len(tra_align) / line_len))):
         start = n * line_len
         end = (n + 1) * line_len
@@ -159,25 +157,22 @@ def process(item):
         print(align_record[start:end])
         # print(pt_record[start:end])
         print('')
-
-        file.write(tra_align[start:end] + '\n')
-        file.write(ocr_align[start:end] + '\n')
-        file.write(align_record[start:end] + '\n\n')
-    file.close()
-
-    # plt.subplot(1, 3, 1)
-    # plt.imshow(mat[1:200, 1:200])
-    # plt.subplot(1, 3, 2)
-    # plt.imshow(x_mat[1:200, 1:200])
-    # plt.subplot(1, 3, 3)
-    # plt.imshow(y_mat[1:200, 1:200])
-    # plt.colorbar()
-    # plt.show()
+    #
+    #     file.write(tra_align[start:end] + '\n')
+    #     file.write(ocr_align[start:end] + '\n')
+    #     file.write(align_record[start:end] + '\n\n')
+    # file.close()
 
     return(tra_align, ocr_align)
 
 
 if __name__ == '__main__':
-    process('einsiedeln_001v')
+
+    item = 'einsiedeln_001v'
+
+    transcript = read_file('./txt/' + item + '_transcript.txt')
+    ocr = read_file('./txt/' + item + '_ocr.txt')
+
+    process(transcript, ocr)
     # for f in files:
     #      process(f)
