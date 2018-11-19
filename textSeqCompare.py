@@ -111,7 +111,7 @@ def process(transcript, ocr):
             print(mpt, xpt, ypt, added_text)
 
             # determine if this diagonal step was a match or a mismatch
-            align_record += 'O' if(transcript[xpt - 1] == ocr[ypt - 1]) else 'X'
+            align_record += 'O' if(transcript[xpt - 1] == ocr[ypt - 1]) else '~'
 
             mpt = mat_ptr[xpt][ypt]
             xpt -= 1

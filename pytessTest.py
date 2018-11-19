@@ -15,7 +15,7 @@ def disp(image):
     image.to_greyscale().to_pil().show()
     return
 
-filename = 'einsiedeln_001v'
+filename = 'einsiedeln_002v'
 
 raw_image = gc.load_image('./png/' + filename + '_text.png')
 image, staff_image = preproc.preprocess_images(raw_image, None)
@@ -40,8 +40,8 @@ conf_str = '-c tessedit_char_whitelist=.abcdefghilmnopqrstuvy ' \
            'load_freq_dawg=0 -psm 7'
 
 for strip in cc_strips:
-    res = pytesseract.image_to_boxes(strip.to_greyscale().to_pil(), config=conf_str, lang='lat')
-    strings.append(pytesseract.image_to_string(strip.to_greyscale().to_pil(), config=conf_str, lang='lat'))
+    res = pytesseract.image_to_boxes(strip.to_greyscale().to_pil(), config=conf_str, lang='deu_frak')
+
     lines = str(res).split('\n')
     for line in lines:
         res = line.split(' ')
@@ -49,12 +49,20 @@ for strip in cc_strips:
         lr = (strip.ul.x + int(res[3]), strip.ul.y + int(res[4]))
         chars += [(res[0], ul, lr)]
 
-# ocr = str(' '.join(strings))
-# ocr = ocr.replace('\n', '')
-# transcript = tsc.read_file('./png/' + filename + '_transcript.txt')
-#
-# tra_align, ocr_align = tsc.process(transcript, ocr)
 
+
+# h_gaps = []
+# ocr = chars[0][0]
+# for num, char in enumerate(chars[:-1]):
+#     next_char = chars[num+1]
+#     gap = max(next_char[1][0] - char[2][0], -1)
+#     h_gaps.append(gap)
+
+ocr = ''.join([c[0] for c in chars])
+
+transcript = tsc.read_file('./png/' + filename + '_transcript.txt')
+transcript = transcript.replace(' ','')
+tra_align, ocr_align = tsc.process(transcript, ocr)
 
 # DRAW ON ORIGINAL IMAGE
 im = image.to_greyscale().to_pil()
