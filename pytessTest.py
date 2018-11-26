@@ -33,14 +33,16 @@ for line in cc_lines:
     cc_strips.append(image.subimage((x_min, y_min), (x_max, y_max)))
 
 chars = []
-strings = []
+strings = ''
 
 conf_str = '-c tessedit_char_whitelist=.abcdefghilmnopqrstuvy ' \
            'textord_space_size_is_variable=1 language_model_ngram_on=0 load_system_dawg=0' \
            'load_freq_dawg=0 -psm 7'
 
 for strip in cc_strips:
-    res = pytesseract.image_to_boxes(strip.to_greyscale().to_pil(), config=conf_str, lang='deu_frak')
+    pil_strip = strip.to_greyscale().to_pil()
+    res = pytesseract.image_to_boxes(pil_strip, config=conf_str, lang='deu_frak')
+    stres = pytesseract.image_to_string(pil_strip, config=conf_str, lang='deu_frak')
 
     lines = str(res).split('\n')
     for line in lines:
@@ -48,6 +50,8 @@ for strip in cc_strips:
         ul = (strip.ul.x + int(res[1]), strip.ul.y + int(res[2]))
         lr = (strip.ul.x + int(res[3]), strip.ul.y + int(res[4]))
         chars += [(res[0], ul, lr)]
+
+    strings += str(stres).replace(' ','')
 
 
 

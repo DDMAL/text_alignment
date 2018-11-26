@@ -17,7 +17,7 @@ noise_area_thresh = 200        # an int in : ignore ccs with area smaller than t
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 20                # size of moving-average filter used to smooth projection
-prominence_tolerance = 0.50     # log-projection peaks must be at least this prominent
+prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
 collision_strip_scale = 1       # in [0,inf]; amt of each cc to consider when clipping
 remove_capitals_scale = 10000   # removes large ccs. turned off for now
 
