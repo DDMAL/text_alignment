@@ -11,14 +11,9 @@ from PIL import Image, ImageDraw, ImageFont
 reload(preproc)
 reload(tsc)
 
-def disp(image):
-    image.to_greyscale().to_pil().show()
-    return
-
-
-filename = 'einsiedeln_002v'
+filename = 'salzinnes_27'
 # ocropus_model = './ocropy-master/models/latin_salz_model_wip.gz'
-ocropus_model = './ocropy-master/models/salzinnes_model-00003000.pyrnn.gz'
+ocropus_model = './ocropy-master/models/salzinnes_model-00004500.pyrnn.gz'
 
 
 raw_image = gc.load_image('./png/' + filename + '_text.png')
@@ -29,7 +24,7 @@ cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
 # cc_strips = [union_images(line) for line in cc_lines]
 cc_strips = []
 for line in cc_lines:
-    pad = 10
+    pad = 0
     x_min = min(c.offset_x for c in line) - pad
     y_min = min(c.offset_y for c in line) - pad
     x_max = max(c.offset_x + c.width for c in line) + pad
@@ -66,17 +61,52 @@ subprocess.check_call("rm -r " + dir, shell=True)
 
 # get full ocr transcript
 ocr = ''.join([item[0] for sublist in all_chars_lines for item in sublist])
+ocr = ocr.replace('~', '')
 transcript = tsc.read_file('./png/' + filename + '_transcript.txt')
 # transcript = transcript.replace(' ', '')
 tra_align, ocr_align = tsc.process(transcript, ocr)
 
+align_transcript_chars = []
+
+# step thru alignment
+transcript_pos = 0
+ocr_pos = 0
+cur_line_num = -1
+cur_line = None
+for i, char in enumerate(ocr_align):
+
+    if not cur_line:
+        cur_line_num += 1
+        cur_line = list(all_chars_lines[cur_line_num])
+
+    if tra_align[i] == "_":
+        del cur_line[0]
+        continue
+
+    if ocr_align[i] == "_":
+        continue
+
+    x_min = cc_strips[cur_line_num].offset_x
+    y_min = cc_strips[cur_line_num].offset_y
+
+    align_transcript_chars.append((tra_align[i], cur_line[0][1] + x_min, y_min))
+    del cur_line[0]
+
 # # DRAW ON ORIGINAL IMAGE
-# im = image.to_greyscale().to_pil()
-# text_size = 40
-# fnt = ImageFont.truetype('Arial.ttf', text_size)
-# draw = ImageDraw.Draw(im)
-# for char in chars:
-#     draw.rectangle((char[1], char[2]), outline=0)
-#     draw.text((char[1][0], char[1][1] - text_size), char[0], font=fnt, fill=0)
-# im.save('testimg.png')
-# im.show()
+im = image.to_greyscale().to_pil()
+text_size = 70
+fnt = ImageFont.truetype('Arial.ttf', text_size)
+draw = ImageDraw.Draw(im)
+# for i, line in enumerate(all_chars_lines):
+#
+#     x_min = cc_strips[i].offset_x
+#     y_min = cc_strips[i].offset_y
+#     # draw.rectangle((char[1], char[2]), outline=0)
+#     for char in line:
+#         draw.text((x_min + int(char[1]), y_min - text_size), char[0], font=fnt, fill=0)
+
+for i, char in enumerate(align_transcript_chars):
+    draw.text((char[1], char[2] - text_size), char[0], font=fnt, fill=0)
+
+im.save('testimg.png')
+im.show()
