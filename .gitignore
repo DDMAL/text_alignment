@@ -4,6 +4,7 @@ CF-*
 testimg*
 testplot*
 testspacing*
+wkdir_*/
 png/
 .DS_Store
 alignenv/

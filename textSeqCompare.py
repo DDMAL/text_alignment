@@ -108,7 +108,7 @@ def process(transcript, ocr):
             tra_align += transcript[xpt - 1]
             ocr_align += ocr[ypt - 1]
             added_text = transcript[xpt] + ' ' + ocr[ypt]
-            print(mpt, xpt, ypt, added_text)
+            # print(mpt, xpt, ypt, added_text)
 
             # determine if this diagonal step was a match or a mismatch
             align_record += 'O' if(transcript[xpt - 1] == ocr[ypt - 1]) else '~'
@@ -133,7 +133,7 @@ def process(transcript, ocr):
             tra_align += '_'
             ocr_align += ocr[ypt - 1]
             added_text = '_ ' + ocr[ypt]
-            print(mpt, xpt, ypt, added_text)
+            # print(mpt, xpt, ypt, added_text)
 
             align_record += ' '
             mpt = y_mat_ptr[xpt][ypt]
@@ -149,7 +149,8 @@ def process(transcript, ocr):
     # file = open('./results/' + item + '_result.txt', 'w+')
     # file.seek(0)
     # file.truncate()
-    for n in range(int(np.ceil(len(tra_align) / line_len))):
+
+    for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
         start = n * line_len
         end = (n + 1) * line_len
         print(tra_align[start:end])
@@ -168,11 +169,6 @@ def process(transcript, ocr):
 
 if __name__ == '__main__':
 
-    item = 'einsiedeln_001v'
-
-    transcript = read_file('./txt/' + item + '_transcript.txt')
-    ocr = read_file('./txt/' + item + '_ocr.txt')
-
-    process(transcript, ocr)
-    # for f in files:
-    #      process(f)
+    seq1 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+    seq2 = 'Lorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.'
+    a, b = process(seq1, seq2)
