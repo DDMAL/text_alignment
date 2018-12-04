@@ -12,10 +12,11 @@ from PIL import Image, ImageDraw, ImageFont
 reload(preproc)
 reload(tsc)
 
-filename = 'salzinnes_31'
+filename = 'salzinnes_18'
 ocropus_model = './ocropy-master/models/salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
+
 
 # removes some special characters from OCR output. ideally these would be useful but not clear how
 # best to integrate them into the alignment algorithm. unidecode doesn't seem to work with these
@@ -74,18 +75,28 @@ for i in range(len(cc_strips)):
 
     x_min = cc_strips[i].offset_x
     y_min = cc_strips[i].offset_y
+    y_max = cc_strips[i].offset_y + cc_strips[i].height
 
+    # note: ocropus seems to associate every character with its RIGHTMOST edge. we want the
+    # left-most edge, so we associate each character with the previous char's right edge
     text_line = []
+    prev_xpos = x_min
     for l in locs:
         lsp = l.split('\t')
+        cur_xpos = float(lsp[1]) + x_min
+
+        ul = (prev_xpos, y_min)
+        lr = (cur_xpos, y_max)
 
         if lsp[0] == '~' or lsp[0] == '':
-            other_chars.append((clean_special_chars(lsp[0]), float(lsp[1]) + x_min, y_min))
-            continue
-        all_chars.append((clean_special_chars(lsp[0]), float(lsp[1]) + x_min, y_min))
+            other_chars.append((lsp[0], ul, lr))
+        else:
+            all_chars.append((clean_special_chars(lsp[0]), ul, lr))
+
+        prev_xpos = cur_xpos
 
 # delete working directory
-# subprocess.check_call("rm -r " + dir, shell=True)
+subprocess.check_call("rm -r " + dir, shell=True)
 
 # get full ocr transcript
 ocr = ''.join(x[0] for x in all_chars)
@@ -94,15 +105,20 @@ transcript = tsc.read_file('./png/' + filename + '_transcript.txt')
 tra_align, ocr_align = tsc.process(transcript, ocr)
 
 # terrible hacky fix:
-tra_align = tra_align[1:] + tra_align[0]
-ocr_align = ocr_align[1:] + ocr_align[0]
+# tra_align = tra_align[1:] + tra_align[0]
+# ocr_align = ocr_align[1:] + ocr_align[0]
 
 align_transcript_chars = []
 
-# insert gaps into ocr output based on alignment string
+# insert gaps into ocr output based on alignment string. this causes all_chars to have gaps at the
+# same points as the ocr_align string does, and is thus the same length as tra_align.
 for i, char in enumerate(ocr_align):
     if char == '_':
         all_chars.insert(i, ('_', 0, 0))
+
+# this could very possibly go wrong (special chars, bug in alignment algorithm, etc) so better
+# make sure that this condition is holding at this point
+assert len(all_chars) == len(tra_align)
 
 for i, ocr_char in enumerate(all_chars):
     tra_char = tra_align[i]
@@ -118,6 +134,7 @@ im = image.to_greyscale().to_pil()
 text_size = 80
 fnt = ImageFont.truetype('Arial.ttf', text_size)
 draw = ImageDraw.Draw(im)
+
 # for i, line in enumerate(all_chars_lines):
 #
 #     x_min = cc_strips[i].offset_x
@@ -127,8 +144,18 @@ draw = ImageDraw.Draw(im)
 #         draw.text((x_min + int(char[1]), y_min - text_size), char[0], font=fnt, fill=0)
 
 for i, char in enumerate(align_transcript_chars):
-    draw.text((char[1], char[2] - text_size), char[0], font=fnt, fill='gray')
-    draw.line([char[1], char[2], char[1], char[2] + 100], fill='gray', width=10)
+    if char[0] in '. ':
+        continue
 
-im.save('testimg.png')
+    ul = char[1]
+    lr = char[2]
+    draw.text((ul[0], ul[1] - text_size), char[0], font=fnt, fill='gray')
+    draw.rectangle([ul, lr], outline='black')
+    draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
+
+for i, peak_loc in enumerate(lines_peak_locs):
+    draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
+    draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
+
+im.save('testimg_{}.png'.format(filename))
 im.show()

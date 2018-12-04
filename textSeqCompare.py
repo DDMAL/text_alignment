@@ -2,16 +2,18 @@ import numpy as np
 from unidecode import unidecode
 import matplotlib.pyplot as plt
 
+
 def read_file(fname):
     file = open(fname, 'r')
     lines = file.readlines()
     file.close()
-    lines = ' '.join(lines)
+    lines = ' '.join(x for x in lines if not x[0] == '#')
     lines = lines.replace('\n', '')
     lines = lines.replace('\r', '')
     lines = lines.replace('| ', '')
     # lines = unidecode(lines)
     return lines
+
 
 # scoring system
 match = 4
@@ -108,7 +110,7 @@ def process(transcript, ocr):
             tra_align += transcript[xpt - 1]
             ocr_align += ocr[ypt - 1]
             added_text = transcript[xpt] + ' ' + ocr[ypt]
-            # print(mpt, xpt, ypt, added_text)
+
 
             # determine if this diagonal step was a match or a mismatch
             align_record += 'O' if(transcript[xpt - 1] == ocr[ypt - 1]) else '~'
@@ -122,7 +124,6 @@ def process(transcript, ocr):
             tra_align += transcript[xpt - 1]
             ocr_align += '_'
             added_text = transcript[xpt] + ' _'
-            # print(mpt, xpt, ypt, added_text)
 
             align_record += ' '
             mpt = x_mat_ptr[xpt][ypt]
@@ -133,22 +134,22 @@ def process(transcript, ocr):
             tra_align += '_'
             ocr_align += ocr[ypt - 1]
             added_text = '_ ' + ocr[ypt]
-            # print(mpt, xpt, ypt, added_text)
 
             align_record += ' '
             mpt = y_mat_ptr[xpt][ypt]
             ypt -= 1
 
-    # reverse all records, since we obtained them by traversing the matrices from the bottom-right
-    tra_align = tra_align[::-1]
-    ocr_align = ocr_align[::-1]
-    align_record = align_record[::-1]
-    pt_record = pt_record[::-1]
+        # for debugging
+        # print(mpt, xpt, ypt, added_text)
 
-    # log results
-    # file = open('./results/' + item + '_result.txt', 'w+')
-    # file.seek(0)
-    # file.truncate()
+    # reverse all records, since we obtained them by traversing the matrices from the bottom-right
+    # we reverse only up to the second-to-last position to compensate for the off-by-one error
+    # earlier (see: ocr_align += ocr[ypt - 1] ). if this is not done then the entire alignment is
+    # out of whack. why is this? that's a great question!
+    tra_align = tra_align[-2::-1] + tra_align[-1]
+    ocr_align = ocr_align[-2::-1] + ocr_align[-1]
+    align_record = align_record[-2::-1] + align_record[-1]
+    pt_record = pt_record[-2::-1] + pt_record[-1]
 
     for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
         start = n * line_len
@@ -156,13 +157,7 @@ def process(transcript, ocr):
         print(tra_align[start:end])
         print(ocr_align[start:end])
         print(align_record[start:end])
-        # print(pt_record[start:end])
         print('')
-    #
-    #     file.write(tra_align[start:end] + '\n')
-    #     file.write(ocr_align[start:end] + '\n')
-    #     file.write(align_record[start:end] + '\n\n')
-    # file.close()
 
     return(tra_align, ocr_align)
 
