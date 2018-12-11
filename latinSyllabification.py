@@ -63,6 +63,15 @@ def syllabify_word(word):
     return res
 
 
+def syllabify_text(input):
+    words = input.split(' ')
+    word_syls = [syllabify_word(w) for w in words]
+    syls = []
+    for ws in word_syls:
+        syls += ws.split('-')
+    return syls
+
+
 def parse_transcript(filename, syllabify=True):
     file = open(filename, 'r')
     lines = file.readlines()
@@ -102,4 +111,4 @@ def parse_transcript(filename, syllabify=True):
 
 
 if __name__ == "__main__":
-    print(parse_transcript('./png/CF-018_3.txt'))
+    print(parse_transcript('./png/salzinnes_18_transcript.txt'))

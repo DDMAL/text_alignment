@@ -83,8 +83,6 @@ def process(transcript, ocr):
             x_mat[i][j] = max(x_mat_vals)
             x_mat_ptr[i][j] = int(x_mat_vals.index(max(x_mat_vals)))
 
-    # asymetric indel?
-
     # TRACEBACK
     # which matrix we're in tells us which direction to head back (diagonally, y, or x)
     # value of that matrix tells us which matrix to go to (mat, y_mat, or x_mat)
@@ -100,19 +98,10 @@ def process(transcript, ocr):
     mpt = mat_ptr[xpt][ypt]
     prev_pt = -1
 
-    # start it off
-    if mpt == 0:
-        tra_align += transcript[xpt]
-        ocr_align += ocr[ypt]
-        align_record += 'O' if(transcript[xpt] == ocr[ypt]) else '~'
-    elif mpt == 1:
-        tra_align += transcript[xpt]
-        ocr_align += '_'
-        align_record += ' '
-    elif mpt == 2:
-        tra_align += '_'
-        ocr_align += ocr[ypt]
-        align_record += ' '
+    # start it off. we are forcibly aligning the final characters. this is not ideal.
+    tra_align += transcript[xpt]
+    ocr_align += ocr[ypt]
+    align_record += 'O' if(transcript[xpt] == ocr[ypt]) else '~'
 
     # start at bottom-right corner and work way up to top-left
     while(xpt > 0 and ypt > 0):
@@ -163,11 +152,13 @@ def process(transcript, ocr):
     while ypt > 0:
         tra_align += '_'
         ocr_align += ocr[ypt - 1]
+        align_record += ' '
         ypt -= 1
 
     while xpt > 0:
         ocr_align += '_'
         tra_align += transcript[xpt - 1]
+        align_record += ' '
         xpt -= 1
 
     # reverse all records, since we obtained them by traversing the matrices from the bottom-right
@@ -189,6 +180,6 @@ def process(transcript, ocr):
 
 if __name__ == '__main__':
 
-    seq1 = ' a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-    seq2 = 'Lorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.'
+    seq1 = 'sssds a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+    seq2 = 'dsdsLorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.fffff'
     a, b = process(seq1, seq2)

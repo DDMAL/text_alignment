@@ -7,10 +7,12 @@ import os
 import PIL
 import numpy as np
 import textSeqCompare as tsc
+import latinSyllabification as latsyl
 import subprocess
 from PIL import Image, ImageDraw, ImageFont
 reload(preproc)
 reload(tsc)
+reload(latsyl)
 
 filename = 'salzinnes_18'
 ocropus_model = './ocropy-master/models/salzinnes_model-00054500.pyrnn.gz'
@@ -136,20 +138,21 @@ for i, ocr_char in enumerate(all_chars):
     elif (tra_char != '_'):
         align_transcript_chars[-1][0] += tra_char
 
+#############################
+# -- GROUP INTO SYLLABLES --
+#############################
 
-# # DRAW ON ORIGINAL IMAGE
+syls = latsyl.syllabify_text(transcript)
+
+#############################
+# -- DRAW RESULTS ON PAGE --
+#############################
+
 im = image.to_greyscale().to_pil()
 text_size = 80
 fnt = ImageFont.truetype('Arial.ttf', text_size)
 draw = ImageDraw.Draw(im)
 
-# for i, line in enumerate(all_chars_lines):
-#
-#     x_min = cc_strips[i].offset_x
-#     y_min = cc_strips[i].offset_y
-#     # draw.rectangle((char[1], char[2]), outline=0)
-#     for char in line:
-#         draw.text((x_min + int(char[1]), y_min - text_size), char[0], font=fnt, fill=0)
 
 for i, char in enumerate(align_transcript_chars):
     if char[0] in '. ':
