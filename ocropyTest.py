@@ -30,6 +30,9 @@ def clean_special_chars(inp):
     inp = inp.replace('\xc5\xab', 'u')
     return inp
 
+#######################
+# -- PRE-PROCESSING --
+#######################
 
 # get raw image of text layer and preform preprocessing to find text lines
 raw_image = gc.load_image('./png/' + filename + '_text.png')
@@ -60,6 +63,10 @@ if not os.path.exists(dir):
 # save strips to directory
 for i, strip in enumerate(cc_strips):
     strip.save_image('./{}/{}_{}.png'.format(dir, filename, i))
+
+#################################
+# -- PERFORM OCR WITH OCROPUS --
+#################################
 
 # call ocropus command to do OCR on each saved line strip
 ocropus_command = 'ocropus-rpred -Q {} --nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
@@ -100,13 +107,14 @@ subprocess.check_call("rm -r " + dir, shell=True)
 
 # get full ocr transcript
 ocr = ''.join(x[0] for x in all_chars)
+all_chars_copy = list(all_chars)
+
+###################################
+# -- PERFORM AND PARSE ALIGNMENT --
+###################################
 
 transcript = tsc.read_file('./png/' + filename + '_transcript.txt')
 tra_align, ocr_align = tsc.process(transcript, ocr)
-
-# terrible hacky fix:
-# tra_align = tra_align[1:] + tra_align[0]
-# ocr_align = ocr_align[1:] + ocr_align[0]
 
 align_transcript_chars = []
 
@@ -118,7 +126,7 @@ for i, char in enumerate(ocr_align):
 
 # this could very possibly go wrong (special chars, bug in alignment algorithm, etc) so better
 # make sure that this condition is holding at this point
-assert len(all_chars) == len(tra_align)
+assert len(all_chars) == len(tra_align), 'all_chars not same length as alignment'
 
 for i, ocr_char in enumerate(all_chars):
     tra_char = tra_align[i]

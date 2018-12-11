@@ -100,8 +100,22 @@ def process(transcript, ocr):
     mpt = mat_ptr[xpt][ypt]
     prev_pt = -1
 
+    # start it off
+    if mpt == 0:
+        tra_align += transcript[xpt]
+        ocr_align += ocr[ypt]
+        align_record += 'O' if(transcript[xpt] == ocr[ypt]) else '~'
+    elif mpt == 1:
+        tra_align += transcript[xpt]
+        ocr_align += '_'
+        align_record += ' '
+    elif mpt == 2:
+        tra_align += '_'
+        ocr_align += ocr[ypt]
+        align_record += ' '
+
     # start at bottom-right corner and work way up to top-left
-    while(xpt >= 0 and ypt >= 0):
+    while(xpt > 0 and ypt > 0):
 
         pt_record += str(int(mpt))
 
@@ -109,7 +123,7 @@ def process(transcript, ocr):
         if mpt == 0:
             tra_align += transcript[xpt - 1]
             ocr_align += ocr[ypt - 1]
-            added_text = transcript[xpt] + ' ' + ocr[ypt]
+            added_text = transcript[xpt - 1] + ' ' + ocr[ypt - 1]
 
 
             # determine if this diagonal step was a match or a mismatch
@@ -123,7 +137,7 @@ def process(transcript, ocr):
         elif mpt == 1:
             tra_align += transcript[xpt - 1]
             ocr_align += '_'
-            added_text = transcript[xpt] + ' _'
+            added_text = transcript[xpt - 1] + ' _'
 
             align_record += ' '
             mpt = x_mat_ptr[xpt][ypt]
@@ -133,23 +147,34 @@ def process(transcript, ocr):
         elif mpt == 2:
             tra_align += '_'
             ocr_align += ocr[ypt - 1]
-            added_text = '_ ' + ocr[ypt]
+            added_text = '_ ' + ocr[ypt - 1]
 
             align_record += ' '
             mpt = y_mat_ptr[xpt][ypt]
             ypt -= 1
 
         # for debugging
-        # print(mpt, xpt, ypt, added_text)
+        print('mpt: {} xpt: {} ypt: {} added_text: [{}]'.format(mpt, xpt, ypt, added_text))
+
+    # we want to have ended on the very top-left cell (xpt == 0, ypt == 0). if this is not so
+    # we need to add the remaining terms from the incomplete sequence.
+
+    print(xpt, ypt)
+    while ypt > 0:
+        tra_align += '_'
+        ocr_align += ocr[ypt - 1]
+        ypt -= 1
+
+    while xpt > 0:
+        ocr_align += '_'
+        tra_align += transcript[xpt - 1]
+        xpt -= 1
 
     # reverse all records, since we obtained them by traversing the matrices from the bottom-right
-    # we reverse only up to the second-to-last position to compensate for the off-by-one error
-    # earlier (see: ocr_align += ocr[ypt - 1] ). if this is not done then the entire alignment is
-    # out of whack. why is this? that's a great question!
-    tra_align = tra_align[-2::-1] + tra_align[-1]
-    ocr_align = ocr_align[-2::-1] + ocr_align[-1]
-    align_record = align_record[-2::-1] + align_record[-1]
-    pt_record = pt_record[-2::-1] + pt_record[-1]
+    tra_align = tra_align[::-1]
+    ocr_align = ocr_align[::-1]
+    align_record = align_record[::-1]
+    pt_record = pt_record[::-1]
 
     for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
         start = n * line_len
@@ -164,6 +189,6 @@ def process(transcript, ocr):
 
 if __name__ == '__main__':
 
-    seq1 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+    seq1 = ' a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
     seq2 = 'Lorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.'
     a, b = process(seq1, seq2)
