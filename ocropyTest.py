@@ -14,7 +14,7 @@ reload(preproc)
 reload(tsc)
 reload(latsyl)
 
-filename = 'salzinnes_18'
+filename = 'einsiedeln_003v'
 ocropus_model = './ocropy-master/models/salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
@@ -135,8 +135,17 @@ for i, ocr_char in enumerate(all_chars):
 
     if not (tra_char == '_' or ocr_char[0] == '_'):
         align_transcript_chars.append([tra_char, ocr_char[1], ocr_char[2]])
-    elif (tra_char != '_'):
+    elif (tra_char != '_') and align_transcript_chars:
         align_transcript_chars[-1][0] += tra_char
+    elif (tra_char != '_'):
+        # a tricky case: what if the first letter of the transcript is assigned to a gap?
+        # then just kinda... prepend it onto the next letter. this looks bad.
+        next_char = all_chars[i+1]
+        char_width = next_char[2][0] - next_char[1][0]
+        new_ul = (max(next_char[1][0] - char_width, 0), next_char[1][1])
+        new_lr = (max(next_char[2][0] - char_width, 0), next_char[2][1])
+        align_transcript_chars.append([tra_char, new_ul, new_lr])
+
 
 #############################
 # -- GROUP INTO SYLLABLES --
@@ -150,6 +159,7 @@ syl_pos = -1                        # track of which syllable trying to get box 
 char_accumulator = ''               # check cur syl against this
 get_new_syl = True                  # flag that next loop should start a new syllable
 cur_ul = 0                          # upper-left point of last unassigned character
+cur_lr = 0                          # lower-right point of last character in loop
 for c in align_transcript_chars:    # @char can have more than one char in char[0]. yeah, i know.
 
     char_text = c[0].replace(' ', '')
@@ -162,7 +172,14 @@ for c in align_transcript_chars:    # @char can have more than one char in char[
         cur_syl = syls[syl_pos]
         cur_ul = c[1]
 
+    # we'd rather not a syllable cross between lines. so, if it looks like that's about to happen
+    # just forget about the part on the upper line and restart on the lower one.
     cur_lr = c[2]
+    new_y_coord = c[1][1]
+    if new_y_coord > cur_ul[1]:
+        cur_ul = c[1]
+
+
     char_accumulator += char_text
     print (cur_syl, char_accumulator, cur_ul, cur_lr)
     # if the accumulator has got the current syllable in it, remove the current syllable
