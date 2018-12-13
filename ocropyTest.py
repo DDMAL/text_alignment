@@ -143,6 +143,35 @@ for i, ocr_char in enumerate(all_chars):
 #############################
 
 syls = latsyl.syllabify_text(transcript)
+syls_boxes = []
+
+# get bounding boxes for each syllable
+syl_pos = -1                        # track of which syllable trying to get box of
+char_accumulator = ''               # check cur syl against this
+get_new_syl = True                  # flag that next loop should start a new syllable
+cur_ul = 0                          # upper-left point of last unassigned character
+for c in align_transcript_chars:    # @char can have more than one char in char[0]. yeah, i know.
+
+    char_text = c[0].replace(' ', '')
+    if not char_text:
+        continue
+
+    if get_new_syl:
+        get_new_syl = False
+        syl_pos += 1
+        cur_syl = syls[syl_pos]
+        cur_ul = c[1]
+
+    cur_lr = c[2]
+    char_accumulator += char_text
+    print (cur_syl, char_accumulator, cur_ul, cur_lr)
+    # if the accumulator has got the current syllable in it, remove the current syllable
+    # from the accumulator and assign that syllable to the bounding box between cur_ul and cur_lr.
+    # note that a syllable can be 'split,' in which case char_accumulator will have chars left in it
+    if cur_syl in char_accumulator:
+        char_accumulator = char_accumulator[len(cur_syl):]
+        syls_boxes.append((cur_syl, cur_ul, cur_lr))
+        get_new_syl = True
 
 #############################
 # -- DRAW RESULTS ON PAGE --
@@ -153,8 +182,7 @@ text_size = 80
 fnt = ImageFont.truetype('Arial.ttf', text_size)
 draw = ImageDraw.Draw(im)
 
-
-for i, char in enumerate(align_transcript_chars):
+for i, char in enumerate(syls_boxes):
     if char[0] in '. ':
         continue
 
