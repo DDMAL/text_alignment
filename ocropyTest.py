@@ -14,8 +14,8 @@ reload(preproc)
 reload(tsc)
 reload(latsyl)
 
-filename = 'einsiedeln_003v'
-ocropus_model = './ocropy-master/models/salzinnes_model-00054500.pyrnn.gz'
+filename = 'salzinnes_31'
+ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
 
