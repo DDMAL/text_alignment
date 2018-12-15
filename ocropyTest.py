@@ -1,9 +1,10 @@
 import gamera.core as gc
 gc.init_gamera()
-import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
+import matplotlib.pyplot as plt
 import textAlignPreprocessing as preproc
 import os
+import shutil
 import PIL
 import numpy as np
 import textSeqCompare as tsc
@@ -19,6 +20,11 @@ ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
 
+# there are some hacks to make this work on windows. no guarantees, and OCRopus will probably
+# complain a lot. you will definitely have to use a model that is NOT zipped, or else go into the
+# common.py file in ocrolib and change the way it's compressed from gunzip to gzip (gunzip is not
+# natively available on windows). also, parallel processing does not work on windows.
+on_windows = (os.name == 'nt')
 
 # removes some special characters from OCR output. ideally these would be useful but not clear how
 # best to integrate them into the alignment algorithm. unidecode doesn't seem to work with these
@@ -70,8 +76,18 @@ for i, strip in enumerate(cc_strips):
 # -- PERFORM OCR WITH OCROPUS --
 #################################
 
-# call ocropus command to do OCR on each saved line strip
-ocropus_command = 'ocropus-rpred -Q {} --nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
+# call ocropus command to do OCR on each saved line strip.
+if on_windows:
+    cwd = os.getcwd()
+    ocropus_command = 'python ./ocropy-master/ocropus-rpred ' \
+        '--nocheck --llocs -m {} {}/{}/*'.format(ocropus_model, cwd, dir)
+else:
+    # the presence of extra quotes \' around the path to be globbed makes a difference. sometimes.
+    # it's unclear.
+    ocropus_command = 'ocropus-rpred -Q {} ' \
+        '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
+
+print('running ocropus with: {}'.format(ocropus_command))
 subprocess.check_call(ocropus_command, shell=True)
 
 # read character position results from llocs file
@@ -105,7 +121,10 @@ for i in range(len(cc_strips)):
         prev_xpos = cur_xpos
 
 # delete working directory
-subprocess.check_call("rm -r " + dir, shell=True)
+if on_windows:
+    shutil.rmtree(dir)
+else:
+    subprocess.check_call('rm -r ' + dir, shell=True)
 
 # get full ocr transcript
 ocr = ''.join(x[0] for x in all_chars)
