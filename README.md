@@ -11,4 +11,4 @@ Requires [OCRopus](https://github.com/tmbdev/ocropy) as well. OCRopus is not an 
 OCRopus only supports Mac officially. I've gotten this project to work on Windows on my machine, since it only needs one component of OCRopus, but YMMV. On Windows, parallel processing doesn't work, and you might see a bunch of warnings pop up during the text recognition part.
 
 ### How To Run
-Just does one file at a time, at the moment. Given ```filename``` to process, this project will look for files at ```./png/filename_text.png``` and ```./png/filename_transcript.txt```.
+Run from textAlign.py. Just does one file at a time, at the moment. Given ```filename``` to process, this project will look for files at ```./png/filename_text.png``` and ```./png/filename_transcript.txt```.
