@@ -15,7 +15,7 @@ reload(preproc)
 reload(tsc)
 reload(latsyl)
 
-filename = 'salzinnes_31'
+filename = 'salzinnes_16'
 ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
@@ -214,7 +214,7 @@ for c in align_transcript_chars:    # @char can have more than one char in char[
 #############################
 
 im = image.to_greyscale().to_pil()
-text_size = 80
+text_size = 70
 fnt = ImageFont.truetype('Arial.ttf', text_size)
 draw = ImageDraw.Draw(im)
 

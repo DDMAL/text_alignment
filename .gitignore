@@ -2,6 +2,7 @@ pip-selfcheck*
 gamera-3.4.3*
 CF-*
 testimg*
+testxml*
 testplot*
 testspacing*
 wkdir_*/
