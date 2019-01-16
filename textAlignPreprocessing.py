@@ -164,9 +164,9 @@ def preprocess_images(input_image, staff_image=None,
     image_bin.invert()
     image_bin.reset_onebit_image()
 
-    # find likely rotation angle and correct
-    angle, tmp = image_bin.rotation_angle_projections()
-    image_bin = image_bin.rotate(angle=angle)
+    # find likely rotation angle and correct (this is disabled for now)
+    # angle, tmp = image_bin.rotation_angle_projections()
+    # image_bin = image_bin.rotate(angle=angle)
 
     for i in range(filter_runs):
         image_bin.filter_short_runs(filter_runs_amt, 'black')
@@ -174,7 +174,7 @@ def preprocess_images(input_image, staff_image=None,
 
     if staff_image:
         staff_image = staff_image.to_onebit()
-        staff_image = staff_image.rotate(angle=angle)
+        # staff_image = staff_image.rotate(angle=angle)
         staff_image.despeckle(despeckle_amt)
         staff_image.filter_narrow_runs(400, 'white')
 
