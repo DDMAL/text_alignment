@@ -57,9 +57,11 @@ def intersect(ul1, lr1, ul2, lr2):
     return not (tmp1 or tmp2)
 
 
+id_to_colliding_text = {}
 for se in syllable_elements:
     # get the neume associated with this syllable
     neume = se[0]
+    syl_id = se.attrib[ns['id'] + 'id']
 
     assert 'neume' in neume.tag
 
@@ -77,10 +79,15 @@ for se in syllable_elements:
     # for collision, extend this bounding box downwards by the height of a line
     lry += med_line_spacing
 
-    # find which text syllable bounding box lies beneath this one. if none does, then
-    # this neume is assigned to the previous text syllable.
+    # find which text syllable bounding boxes lie beneath this one
     colliding_syls = [s for s in syls_boxes if intersect(s[1], s[2], (ulx, uly), (lrx, lry))]
-    print(len(colliding_syls))
+
+    if colliding_syls:
+        leftmost_colliding_syl = min(colliding_syls, key=lambda x: x[1][0])
+        id_to_colliding_text[syl_id] = leftmost_colliding_syl
+    else:
+        id_to_colliding_text[syl_id] = None
+
 
 
 #############################
