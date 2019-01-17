@@ -30,6 +30,9 @@ ns = {'id': '{http://www.w3.org/XML/1998/namespace}',
 tree = ET.parse('salzinnes_mei_split/CF-011.mei')
 root = tree.getroot()
 
+# this dict takes in any non-root element and returns its parent
+parent_map = {c:p for p in tree.iter() for c in p}
+
 zones = root.findall('.//{}zone'.format(ns['mei']))
 id_to_bbox = {}
 
@@ -49,19 +52,24 @@ all_bboxes = []
 
 # a helper function for the next part:
 def intersect(ul1, lr1, ul2, lr2):
-    # is the top of 1 below the bottom of 2 (or vice versa)
+    # is the top of 1 below the bottom of 2 (or vice versa)?
     tmp1 = (ul1[1] > lr2[1]) or (ul2[1] > lr1[1])
-    # is the left side of 1 to the right of 2 (or vice versa)
+    # is the left side of 1 to the right of 2 (or vice versa)?
     tmp2 = (ul1[0] > lr2[0]) or (ul2[0] > lr1[0])
-    # if either of these are true, then there is no intersection
+    # iff either of these are true, then there is no intersection
     return not (tmp1 or tmp2)
 
 
 id_to_colliding_text = {}
-for se in syllable_elements:
+acc_syllable = None
+prev_text = None
+for i, se in enumerate(syllable_elements):
     # get the neume associated with this syllable
     neume = se[0]
     syl_id = se.attrib[ns['id'] + 'id']
+
+    if not acc_syllable:
+        acc_syllable = se
 
     assert 'neume' in neume.tag
 
@@ -83,12 +91,19 @@ for se in syllable_elements:
     colliding_syls = [s for s in syls_boxes if intersect(s[1], s[2], (ulx, uly), (lrx, lry))]
 
     if colliding_syls:
-        leftmost_colliding_syl = min(colliding_syls, key=lambda x: x[1][0])
-        id_to_colliding_text[syl_id] = leftmost_colliding_syl
+        leftmost_colliding_text = min(colliding_syls, key=lambda x: x[1][0])
     else:
-        id_to_colliding_text[syl_id] = None
+        leftmost_colliding_text = None
+    id_to_colliding_text[syl_id] = leftmost_colliding_text
 
+    # if there is no text OR if the found text is the same as last time then the neume being
+    # considered here is linked to the previous syllable.
+    if (not leftmost_colliding_text) or leftmost_colliding_text == prev_text
+        pass
+    else
+        acc_syllable = se
 
+    prev_text = leftmost_colliding_text
 
 #############################
 # -- DRAW RESULTS ON PAGE --
