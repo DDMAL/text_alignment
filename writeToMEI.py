@@ -61,15 +61,18 @@ def intersect(ul1, lr1, ul2, lr2):
 
 
 id_to_colliding_text = {}
-acc_syllable = None
+cur_syllable = None
 prev_text = None
+prev_assigned_text = None
+elements_to_remove = []
+assign_lines = []
 for i, se in enumerate(syllable_elements):
     # get the neume associated with this syllable
     neume = se[0]
     syl_id = se.attrib[ns['id'] + 'id']
 
-    if not acc_syllable:
-        acc_syllable = se
+    if not cur_syllable:
+        cur_syllable = se
 
     assert 'neume' in neume.tag
 
@@ -85,25 +88,43 @@ for i, se in enumerate(syllable_elements):
     all_bboxes.append([ulx, uly, lrx, lry])
 
     # for collision, extend this bounding box downwards by the height of a line
-    lry += med_line_spacing
+    lry += med_line_spacing / 2
 
     # find which text syllable bounding boxes lie beneath this one
     colliding_syls = [s for s in syls_boxes if intersect(s[1], s[2], (ulx, uly), (lrx, lry))]
 
     if colliding_syls:
         leftmost_colliding_text = min(colliding_syls, key=lambda x: x[1][0])
+        prev_assigned_text = leftmost_colliding_text
     else:
         leftmost_colliding_text = None
     id_to_colliding_text[syl_id] = leftmost_colliding_text
 
     # if there is no text OR if the found text is the same as last time then the neume being
     # considered here is linked to the previous syllable.
-    if (not leftmost_colliding_text) or leftmost_colliding_text == prev_text
-        pass
-    else
-        acc_syllable = se
+    if (not leftmost_colliding_text) or (leftmost_colliding_text == prev_text):
+        cur_syllable.append(neume)
+        elements_to_remove.append(se)
+    else:
+        cur_syllable = se
+        cur_syllable.text = leftmost_colliding_text[0]
+        cur_syllable.append(neume)
+
+    last_assigned_text = id_to_colliding_text
+
+    center_x = (ulx + lrx) / 2
+    center_y = (lrx + lry) / 2
+
+    if prev_assigned_text:
+        assign_lines.append([ulx, uly, prev_assigned_text[1][0], prev_assigned_text[1][1]])
 
     prev_text = leftmost_colliding_text
+
+
+for el in elements_to_remove:
+    parent_map[el].remove(el)
+
+tree.write('testxml_{}.xml'.format(fname))
 
 #############################
 # -- DRAW RESULTS ON PAGE --
@@ -124,12 +145,16 @@ for i, char in enumerate(syls_boxes):
     draw.rectangle([ul, lr], outline='black')
     draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
 
-for i, peak_loc in enumerate(lines_peak_locs):
-    draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
-    draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
+# for i, peak_loc in enumerate(lines_peak_locs):
+#     draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
+#     draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
 for box in all_bboxes:
     draw.rectangle(box, outline='black')
+
+for al in assign_lines:
+    draw.line([al[0], al[1], al[2], al[3]], fill='black', width=15)
+
 
 im.save('testimg_{}.png'.format(fname))
 im.show()
