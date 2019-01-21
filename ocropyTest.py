@@ -25,6 +25,7 @@ median_line_mult = 2
 # natively available on windows). also, parallel processing does not work on windows.
 on_windows = (os.name == 'nt')
 
+
 # removes some special characters from OCR output. ideally these would be useful but not clear how
 # best to integrate them into the alignment algorithm. unidecode doesn't seem to work with these
 # either
@@ -37,7 +38,8 @@ def clean_special_chars(inp):
     inp = inp.replace('\xc5\xab', 'u')
     return inp
 
-def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model):
+
+def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=False):
 
     #######################
     # -- PRE-PROCESSING --
@@ -166,7 +168,6 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
             new_lr = (max(next_char[2][0] - char_width, 0), next_char[2][1])
             align_transcript_chars.append([tra_char, new_ul, new_lr])
 
-
     #############################
     # -- GROUP INTO SYLLABLES --
     #############################
@@ -200,7 +201,10 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
             cur_ul = c[1]
 
         char_accumulator += char_text
-        print (cur_syl, char_accumulator, cur_ul, cur_lr)
+
+        if verbose:
+            print (cur_syl, char_accumulator, cur_ul, cur_lr)
+
         # if the accumulator has got the current syllable in it, remove the current syllable
         # from the accumulator and assign that syllable to the bounding box between cur_ul and cur_lr.
         # note that a syllable can be 'split,' in which case char_accumulator will have chars left in it

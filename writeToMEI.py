@@ -9,14 +9,24 @@ reload(tsc)
 reload(ocp)
 
 
-# layer = ET.Element('layer')
-# syllable = ET.SubElement(layer, 'syllable')
-# ET.SubElement(syllable, "syl").text = "Splen"
-# syllable2 = ET.SubElement(layer, 'syllable')
-# ET.SubElement(syllable2, "syl").text = "dor"
-#
-# tree = ET.ElementTree(layer)
-# ET.dump(tree)
+# a helper function
+def intersect(ul1, lr1, ul2, lr2):
+    dx = min(lr1[1], lr2[1]) - max(ul1[1], ul2[1])
+    dy = min(lr1[0], lr2[0]) - max(ul1[0], ul2[0])
+    if (dx > 0) and (dy > 0):
+        return dx*dy
+    else:
+        return False
+
+
+def generate_id():
+    str = 'm-' + hex(np.random.randint(0, 16 ** 8))[2:]
+    str += '-' + hex(np.random.randint(0, 16 ** 4))[2:]
+    str += '-' + hex(np.random.randint(0, 16 ** 4))[2:]
+    str += '-' + hex(np.random.randint(0, 16 ** 4))[2:]
+    str += '-' + hex(np.random.randint(0, 16 ** 12))[2:]
+    return str
+
 
 fname = 'salzinnes_11'
 raw_image = gc.load_image('./png/' + fname + '_text.png')
@@ -28,19 +38,15 @@ ns = {'id': '{http://www.w3.org/XML/1998/namespace}',
     'mei': '{http://www.music-encoding.org/ns/mei}'}
 
 tree = ET.parse('salzinnes_mei_split/CF-011.mei')
+ET.register_namespace('', 'http://www.music-encoding.org/ns/mei')
 root = tree.getroot()
 
 # this dict takes in any non-root element and returns its parent
-parent_map = {c:p for p in tree.iter() for c in p}
+parent_map = {c: p for p in tree.iter() for c in p}
 
 zones = root.findall('.//{}zone'.format(ns['mei']))
+surface = root.findall('.//{}surface'.format(ns['mei']))[0]
 id_to_bbox = {}
-
-# get all elements that have an id
-all_elements = root.findall('.//nc')
-# all_elements = [el for el in all_elements if 'zone' not in el.tag]
-# id_to_element = {el.attrib[ns['id'] + 'id']: el for el in all_elements}
-
 
 for zone in zones:
     id = zone.attrib[ns['id'] + 'id']
@@ -48,17 +54,6 @@ for zone in zones:
 
 syllable_elements = root.findall('.//{}syllable'.format(ns['mei']))
 all_bboxes = []
-
-
-# a helper function for the next part:
-def intersect(ul1, lr1, ul2, lr2):
-    # is the top of 1 below the bottom of 2 (or vice versa)?
-    tmp1 = (ul1[1] > lr2[1]) or (ul2[1] > lr1[1])
-    # is the left side of 1 to the right of 2 (or vice versa)?
-    tmp2 = (ul1[0] > lr2[0]) or (ul2[0] > lr1[0])
-    # iff either of these are true, then there is no intersection
-    return not (tmp1 or tmp2)
-
 
 id_to_colliding_text = {}
 cur_syllable = None
@@ -85,13 +80,14 @@ for i, se in enumerate(syllable_elements):
     ulx = min(int(bb['ulx']) for bb in bboxes)
     uly = min(int(bb['uly']) for bb in bboxes)
 
+    # for collision, translate this bounding box downwards by the height of a line
+    trans_lry = lry + med_line_spacing / 2
+    trans_uly = uly + med_line_spacing / 2
     all_bboxes.append([ulx, uly, lrx, lry])
 
-    # for collision, extend this bounding box downwards by the height of a line
-    lry += med_line_spacing / 2
-
     # find which text syllable bounding boxes lie beneath this one
-    colliding_syls = [s for s in syls_boxes if intersect(s[1], s[2], (ulx, uly), (lrx, lry))]
+    colliding_syls = [s for s in syls_boxes
+        if intersect(s[1], s[2], (ulx, trans_uly), (lrx, trans_lry)) > 0]
 
     if colliding_syls:
         leftmost_colliding_text = min(colliding_syls, key=lambda x: x[1][0])
@@ -110,6 +106,16 @@ for i, se in enumerate(syllable_elements):
         cur_syllable.text = leftmost_colliding_text[0]
         cur_syllable.append(neume)
 
+        # add corresponding zone to surface.
+        new_zone = ET.SubElement(surface, '{}zone'.format(ns['mei']))
+        new_id = generate_id()
+        cur_syllable.set('facs', new_id)
+        new_zone.set(ns['id'] + 'id', new_id)
+        new_zone.set('lrx', str(lrx))
+        new_zone.set('lry', str(lry))
+        new_zone.set('ulx', str(ulx))
+        new_zone.set('uly', str(uly))
+
     last_assigned_text = id_to_colliding_text
 
     center_x = (ulx + lrx) / 2
@@ -121,6 +127,8 @@ for i, se in enumerate(syllable_elements):
     prev_text = leftmost_colliding_text
 
 
+# end loop over syllables
+# remove "syllables" that just held neumes and are now duplicates
 for el in elements_to_remove:
     parent_map[el].remove(el)
 
@@ -153,7 +161,7 @@ for box in all_bboxes:
     draw.rectangle(box, outline='black')
 
 for al in assign_lines:
-    draw.line([al[0], al[1], al[2], al[3]], fill='black', width=15)
+    draw.line([al[0], al[1], al[2], al[3]], fill='black', width=10)
 
 
 im.save('testimg_{}.png'.format(fname))
