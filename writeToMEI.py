@@ -37,8 +37,9 @@ med_line_spacing = np.median(np.diff(lines_peak_locs))
 ns = {'id': '{http://www.w3.org/XML/1998/namespace}',
     'mei': '{http://www.music-encoding.org/ns/mei}'}
 
-tree = ET.parse('salzinnes_mei_split/CF-011.mei')
 ET.register_namespace('', 'http://www.music-encoding.org/ns/mei')
+ET.register_namespace('', 'http://www.w3.org/1999/xlink')
+tree = ET.parse('salzinnes_mei_split/CF-013.mei')
 root = tree.getroot()
 
 # this dict takes in any non-root element and returns its parent
