@@ -114,7 +114,6 @@ def process(transcript, ocr):
             ocr_align += ocr[ypt - 1]
             added_text = transcript[xpt - 1] + ' ' + ocr[ypt - 1]
 
-
             # determine if this diagonal step was a match or a mismatch
             align_record += 'O' if(transcript[xpt - 1] == ocr[ypt - 1]) else '~'
 
@@ -143,7 +142,7 @@ def process(transcript, ocr):
             ypt -= 1
 
         # for debugging
-        print('mpt: {} xpt: {} ypt: {} added_text: [{}]'.format(mpt, xpt, ypt, added_text))
+        # print('mpt: {} xpt: {} ypt: {} added_text: [{}]'.format(mpt, xpt, ypt, added_text))
 
     # we want to have ended on the very top-left cell (xpt == 0, ypt == 0). if this is not so
     # we need to add the remaining terms from the incomplete sequence.

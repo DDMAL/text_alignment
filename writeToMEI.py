@@ -83,12 +83,12 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
         lry = max(int(bb['lry']) for bb in bboxes)
         ulx = min(int(bb['ulx']) for bb in bboxes)
         uly = min(int(bb['uly']) for bb in bboxes)
+        all_bboxes.append([ulx, uly, lrx, lry])
 
         # translate this bounding box downwards by half the height of a line
         # this should put well-positioned neumes right in the middle of the text they're associated with
-        trans_lry = lry + med_line_spacing / 2
+        trans_lry = lry + med_line_spacing
         trans_uly = uly + med_line_spacing / 2
-        all_bboxes.append([ulx, uly, lrx, lry])
 
         # find text bounding boxes that intersect the translated neume bounding boxes
         colliding_syls = [s for s in syls_boxes
@@ -96,10 +96,14 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
 
         # take just the leftmost text bounding box that was found
         if colliding_syls:
-            leftmost_colliding_text = min(colliding_syls, key=lambda x: x[1][0])
+            # leftmost_colliding_text = min(colliding_syls, key=lambda x: x[1][0])
+            leftmost_colliding_text = max(colliding_syls,
+                key=lambda s: intersect(s[1], s[2], (ulx, trans_uly), (lrx, trans_lry)))
             prev_assigned_text = leftmost_colliding_text
         else:
             leftmost_colliding_text = None
+
+
 
         # if there is no text OR if the found text is the same as last time then the neume being
         # considered here is linked to the previous syllable.
@@ -138,19 +142,22 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
 
 if __name__ == '__main__':
 
-    fname = 'salzinnes_19'
-    xml_fname = 'salzinnes_mei_split/CF-011.mei'
+    fname = 'salzinnes_34'
 
     # load data: image, transcript, MEI file
     raw_image = gc.load_image('./png/' + fname + '_text.png')
     transcript = tsc.read_file('./png/' + fname + '_transcript.txt')
-    with open(xml_fname, 'r') as f:
+    with open('./mei/' + fname + '.mei', 'r') as f:
         raw_xml = f.read()
 
     # forgive me for this but the xml output by pitchfinding has a namespace issue and this is the
     # only way i can think of to correctly parse it without changing something in JSOMR2MEI
     ET.register_namespace('', 'http://www.music-encoding.org/ns/mei')
-    root = ET.fromstring(repair_xml(raw_xml))
+    try:
+        root = ET.fromstring(raw_xml)
+    except ET.ParseError:
+        root = ET.fromstring(repair_xml(raw_xml))
+
     tree = ET.ElementTree()
     tree._setroot(root)
 
@@ -158,12 +165,11 @@ if __name__ == '__main__':
     syls_boxes, image, lines_peak_locs = ocp.process(raw_image, transcript, wkdir_name='test')
 
     # median vertical space between text lines, for later
-    med_line_spacing = np.median(np.diff(lines_peak_locs))
+    med_line_spacing = np.quantile(np.diff(lines_peak_locs), 0.75)
 
     tree, all_bboxes, assign_lines = add_text_to_mei_file(tree, syls_boxes, med_line_spacing)
 
     tree.write('testxml_{}.xml'.format(fname))
-
 
     #############################
     # -- DRAW RESULTS ON PAGE --
@@ -184,15 +190,15 @@ if __name__ == '__main__':
         draw.rectangle([ul, lr], outline='black')
         draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
 
-    # for i, peak_loc in enumerate(lines_peak_locs):
-    #     draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
-    #     draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
+    for i, peak_loc in enumerate(lines_peak_locs):
+        draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
+        draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=1)
 
     for box in all_bboxes:
         draw.rectangle(box, outline='black')
 
     for al in assign_lines:
-        draw.line([al[0], al[1], al[2], al[3]], fill='black', width=10)
+        draw.line([al[0], al[1], al[2], al[3]], fill='black', width=5)
 
     im.save('testimg_{}.png'.format(fname))
     im.show()
