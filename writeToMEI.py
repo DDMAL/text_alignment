@@ -142,63 +142,68 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
 
 if __name__ == '__main__':
 
-    fname = 'salzinnes_34'
+    for file_index in range(5,40):
+        fname = 'salzinnes_{:02d}'.format(file_index)
 
-    # load data: image, transcript, MEI file
-    raw_image = gc.load_image('./png/' + fname + '_text.png')
-    transcript = tsc.read_file('./png/' + fname + '_transcript.txt')
-    with open('./mei/' + fname + '.mei', 'r') as f:
-        raw_xml = f.read()
-
-    # forgive me for this but the xml output by pitchfinding has a namespace issue and this is the
-    # only way i can think of to correctly parse it without changing something in JSOMR2MEI
-    ET.register_namespace('', 'http://www.music-encoding.org/ns/mei')
-    try:
-        root = ET.fromstring(raw_xml)
-    except ET.ParseError:
-        root = ET.fromstring(repair_xml(raw_xml))
-
-    tree = ET.ElementTree()
-    tree._setroot(root)
-
-    # process image and transcript with ocropus and get aligned syllable bounding boxes
-    syls_boxes, image, lines_peak_locs = ocp.process(raw_image, transcript, wkdir_name='test')
-
-    # median vertical space between text lines, for later
-    med_line_spacing = np.quantile(np.diff(lines_peak_locs), 0.75)
-
-    tree, all_bboxes, assign_lines = add_text_to_mei_file(tree, syls_boxes, med_line_spacing)
-
-    tree.write('testxml_{}.xml'.format(fname))
-
-    #############################
-    # -- DRAW RESULTS ON PAGE --
-    #############################
-
-    im = raw_image.to_greyscale().to_pil()
-    text_size = 70
-    fnt = ImageFont.truetype('Arial.ttf', text_size)
-    draw = ImageDraw.Draw(im)
-
-    for i, char in enumerate(syls_boxes):
-        if char[0] in '. ':
+        # load data: image, transcript, MEI file
+        try:
+            transcript = tsc.read_file('./png/' + fname + '_transcript.txt')
+            raw_image = gc.load_image('./png/' + fname + '_text.png')
+        except IOError:
             continue
 
-        ul = char[1]
-        lr = char[2]
-        draw.text((ul[0], ul[1] - text_size), char[0], font=fnt, fill='gray')
-        draw.rectangle([ul, lr], outline='black')
-        draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
+        with open('./mei/' + fname + '.mei', 'r') as f:
+            raw_xml = f.read()
 
-    for i, peak_loc in enumerate(lines_peak_locs):
-        draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
-        draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=1)
+        # forgive me for this but the xml output by pitchfinding has a namespace issue and this is the
+        # only way i can think of to correctly parse it without changing something in JSOMR2MEI
+        ET.register_namespace('', 'http://www.music-encoding.org/ns/mei')
+        try:
+            root = ET.fromstring(raw_xml)
+        except ET.ParseError:
+            root = ET.fromstring(repair_xml(raw_xml))
 
-    for box in all_bboxes:
-        draw.rectangle(box, outline='black')
+        tree = ET.ElementTree()
+        tree._setroot(root)
 
-    for al in assign_lines:
-        draw.line([al[0], al[1], al[2], al[3]], fill='black', width=5)
+        # process image and transcript with ocropus and get aligned syllable bounding boxes
+        syls_boxes, image, lines_peak_locs = ocp.process(raw_image, transcript, wkdir_name='test')
 
-    im.save('testimg_{}.png'.format(fname))
-    im.show()
+        # median vertical space between text lines, for later
+        med_line_spacing = np.quantile(np.diff(lines_peak_locs), 0.75)
+
+        tree, all_bboxes, assign_lines = add_text_to_mei_file(tree, syls_boxes, med_line_spacing)
+
+        tree.write('testxml_{}.xml'.format(fname))
+
+        #############################
+        # -- DRAW RESULTS ON PAGE --
+        #############################
+
+        im = raw_image.to_greyscale().to_pil()
+        text_size = 70
+        fnt = ImageFont.truetype('Arial.ttf', text_size)
+        draw = ImageDraw.Draw(im)
+
+        for i, char in enumerate(syls_boxes):
+            if char[0] in '. ':
+                continue
+
+            ul = char[1]
+            lr = char[2]
+            draw.text((ul[0], ul[1] - text_size), char[0], font=fnt, fill='gray')
+            draw.rectangle([ul, lr], outline='black')
+            draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
+
+        for i, peak_loc in enumerate(lines_peak_locs):
+            draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
+            draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=1)
+
+        for box in all_bboxes:
+            draw.rectangle(box, outline='black')
+
+        for al in assign_lines:
+            draw.line([al[0], al[1], al[2], al[3]], fill='black', width=5)
+
+        im.save('testimg_{}.png'.format(fname))
+    # im.show()
