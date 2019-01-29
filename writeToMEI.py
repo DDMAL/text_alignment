@@ -103,8 +103,6 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
         else:
             leftmost_colliding_text = None
 
-
-
         # if there is no text OR if the found text is the same as last time then the neume being
         # considered here is linked to the previous syllable.
         if (not leftmost_colliding_text) or (leftmost_colliding_text == prev_text):
@@ -116,7 +114,7 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
         else:
             cur_syllable = se
             cur_syllable.text = leftmost_colliding_text[0]
-            cur_syllable.append(neume)
+            # cur_syllable.append(neume)
 
             new_zone = ET.SubElement(surface, '{}zone'.format(ns['mei']))
             new_id = generate_id()
@@ -142,7 +140,7 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
 
 if __name__ == '__main__':
 
-    for file_index in range(5,40):
+    for file_index in range(19,25):
         fname = 'salzinnes_{:02d}'.format(file_index)
 
         # load data: image, transcript, MEI file
