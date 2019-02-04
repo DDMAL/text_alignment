@@ -113,8 +113,10 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
         # it in the manifest section with a new zone and set the cur_syllable variable
         else:
             cur_syllable = se
-            cur_syllable.text = leftmost_colliding_text[0]
-            # cur_syllable.append(neume)
+            # cur_syllable.text = leftmost_colliding_text[0]
+            new_syl_el = ET.Element('syl')
+            new_syl_el.text = leftmost_colliding_text[0]
+            cur_syllable.insert(0, new_syl_el)
 
             new_zone = ET.SubElement(surface, '{}zone'.format(ns['mei']))
             new_id = generate_id()
