@@ -5,12 +5,11 @@ import matplotlib.pyplot as plt
 import textAlignPreprocessing as preproc
 import os
 import shutil
-import PIL
 import numpy as np
 import textSeqCompare as tsc
 import latinSyllabification as latsyl
 import subprocess
-from PIL import Image, ImageDraw, ImageFont
+
 reload(preproc)
 reload(tsc)
 reload(latsyl)
@@ -24,7 +23,6 @@ median_line_mult = 2
 # common.py file in ocrolib and change the way it's compressed from gunzip to gzip (gunzip is not
 # natively available on windows). also, parallel processing does not work on windows.
 on_windows = (os.name == 'nt')
-
 
 # removes some special characters from OCR output. ideally these would be useful but not clear how
 # best to integrate them into the alignment algorithm. unidecode doesn't seem to work with these
@@ -50,7 +48,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     image, staff_image = preproc.preprocess_images(raw_image, None)
     cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
 
-    # get bounding box around each line, with padding (does padding affect ocropus output?)
+    # get bounding box around each line, with padding
     cc_strips = []
     for line in cc_lines:
         pad = 0
@@ -85,8 +83,8 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         ocropus_command = 'python ./ocropy-master/ocropus-rpred ' \
             '--nocheck --llocs -m {} {}/{}/*'.format(ocropus_model, cwd, dir)
     else:
-        # the presence of extra quotes \' around the path to be globbed makes a difference. sometimes.
-        # it's unclear.
+        # the presence of extra quotes \' around the path to be globbed makes a difference.
+        # sometimes. it's unclear.
         ocropus_command = 'ocropus-rpred -Q {} ' \
             '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
 
@@ -137,8 +135,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
 
-    # transcript = tsc.read_file('./png/' + filename + '_transcript.txt')
-    tra_align, ocr_align = tsc.process(transcript, ocr)
+    tra_align, ocr_align = tsc.perform_alignment(transcript, ocr, verbose=verbose)
 
     align_transcript_chars = []
 
@@ -181,7 +178,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     get_new_syl = True                  # flag that next loop should start a new syllable
     cur_ul = 0                          # upper-left point of last unassigned character
     cur_lr = 0                          # lower-right point of last character in loop
-    for c in align_transcript_chars:    # @c can have more than one char in c[0]. yeah, i know.
+    for c in align_transcript_chars:    # @c can have more than one char in c[0].
 
         char_text = c[0].replace(' ', '')
         if not char_text:
@@ -217,6 +214,9 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
 
 
 if __name__ == '__main__':
+
+    import PIL
+    from PIL import Image, ImageDraw, ImageFont
 
     fname = 'salzinnes_16'
     raw_image = gc.load_image('./png/' + fname + '_text.png')

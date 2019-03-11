@@ -36,7 +36,7 @@ files = ['einsiedeln_001r', 'einsiedeln_001v', 'einsiedeln_002r',
     'stmaurf_49r']
 
 
-def process(transcript, ocr):
+def perform_alignment(transcript, ocr, verbose=False):
 
     # transcript = 'dafsad'
     # ocr = 'dfasd'
@@ -147,7 +147,7 @@ def process(transcript, ocr):
     # we want to have ended on the very top-left cell (xpt == 0, ypt == 0). if this is not so
     # we need to add the remaining terms from the incomplete sequence.
 
-    print(xpt, ypt)
+    # print(xpt, ypt)
     while ypt > 0:
         tra_align += '_'
         ocr_align += ocr[ypt - 1]
@@ -181,4 +181,4 @@ if __name__ == '__main__':
 
     seq1 = 'sssds a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
     seq2 = 'dsdsLorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.fffff'
-    a, b = process(seq1, seq2)
+    a, b = perform_alignment(seq1, seq2, verbose=True)

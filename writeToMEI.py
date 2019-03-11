@@ -3,7 +3,7 @@ import numpy as np
 import gamera.core as gc
 gc.init_gamera()
 import textSeqCompare as tsc
-import ocropyTest as ocp
+import alignToOCR as ocp
 from PIL import Image, ImageDraw, ImageFont
 reload(tsc)
 reload(ocp)
@@ -19,6 +19,7 @@ def intersect(ul1, lr1, ul2, lr2):
     else:
         return False
 
+
 # generates a unique ID for XML elements
 def generate_id():
     str = 'm-' + hex(np.random.randint(0, 16 ** 8))[2:]
@@ -28,11 +29,13 @@ def generate_id():
     str += '-' + hex(np.random.randint(0, 16 ** 12))[2:]
     return str
 
-def repair_xml(input):
-    pt = raw_xml.index('meiversion')
+
+def repair_xml(xml_input):
+    pt = xml_input.index('meiversion')
     insert = 'xmlns:xlink="http://www.w3.org/1999/xlink" '
-    repaired_xml = raw_xml[:pt] + insert + raw_xml[pt:]
+    repaired_xml = xml_input[:pt] + insert + xml_input[pt:]
     return repaired_xml
+
 
 def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
 
@@ -140,9 +143,10 @@ def add_text_to_mei_file(tree, syls_boxes, med_line_spacing):
 
     return tree, all_bboxes, assign_lines
 
+
 if __name__ == '__main__':
 
-    for file_index in range(19,25):
+    for file_index in range(16, 17):
         fname = 'salzinnes_{:02d}'.format(file_index)
 
         # load data: image, transcript, MEI file
