@@ -153,13 +153,14 @@ def perform_alignment(transcript, ocr, verbose=False):
     align_record = align_record[::-1]
     pt_record = pt_record[::-1]
 
-    for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
-        start = n * line_len
-        end = (n + 1) * line_len
-        print(tra_align[start:end])
-        print(ocr_align[start:end])
-        print(align_record[start:end])
-        print('')
+    if verbose:
+        for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
+            start = n * line_len
+            end = (n + 1) * line_len
+            print(tra_align[start:end])
+            print(ocr_align[start:end])
+            print(align_record[start:end])
+            print('')
 
     return(tra_align, ocr_align)
 
