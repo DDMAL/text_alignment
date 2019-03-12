@@ -2,19 +2,6 @@ import numpy as np
 from unidecode import unidecode
 import matplotlib.pyplot as plt
 
-
-def read_file(fname):
-    file = open(fname, 'r')
-    lines = file.readlines()
-    file.close()
-    lines = ' '.join(x for x in lines if not x[0] == '#')
-    lines = lines.replace('\n', '')
-    lines = lines.replace('\r', '')
-    lines = lines.replace('| ', '')
-    # lines = unidecode(lines)
-    return lines
-
-
 # scoring system
 match = 4
 mismatch = -4

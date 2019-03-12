@@ -24,6 +24,7 @@ median_line_mult = 2
 # natively available on windows). also, parallel processing does not work on windows.
 on_windows = (os.name == 'nt')
 
+
 # removes some special characters from OCR output. ideally these would be useful but not clear how
 # best to integrate them into the alignment algorithm. unidecode doesn't seem to work with these
 # either
@@ -35,6 +36,18 @@ def clean_special_chars(inp):
     inp = inp.replace('\xc5\x8d', 'o')
     inp = inp.replace('\xc5\xab', 'u')
     return inp
+
+
+def read_file(fname):
+    file = open(fname, 'r')
+    lines = file.readlines()
+    file.close()
+    lines = ' '.join(x for x in lines if not x[0] == '#')
+    lines = lines.replace('\n', '')
+    lines = lines.replace('\r', '')
+    lines = lines.replace('| ', '')
+    # lines = unidecode(lines)
+    return lines
 
 
 def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=False):
@@ -220,7 +233,7 @@ if __name__ == '__main__':
 
     fname = 'salzinnes_16'
     raw_image = gc.load_image('./png/' + fname + '_text.png')
-    transcript = tsc.read_file('./png/' + fname + '_transcript.txt')
+    transcript = read_file('./png/' + fname + '_transcript.txt')
     syls_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
 
     #############################

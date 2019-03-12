@@ -151,7 +151,7 @@ if __name__ == '__main__':
 
         # load data: image, transcript, MEI file
         try:
-            transcript = tsc.read_file('./png/' + fname + '_transcript.txt')
+            transcript = ocp.read_file('./png/' + fname + '_transcript.txt')
             raw_image = gc.load_image('./png/' + fname + '_text.png')
         except IOError:
             continue
