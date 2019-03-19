@@ -176,7 +176,7 @@ def preprocess_images(input_image, staff_image=None,
         staff_image = staff_image.to_onebit()
         # staff_image = staff_image.rotate(angle=angle)
         staff_image.despeckle(despeckle_amt)
-        staff_image.filter_narrow_runs(400, 'white')
+        staff_image.filter_narrow_runs(1000, 'white')
 
     return image_bin, staff_image
 
@@ -190,6 +190,15 @@ def identify_text_lines(image_bin):
 
     # calculate normalized log prominence of all peaks in projection
     peak_locations = find_peak_locations(smoothed_projection)
+
+    # draw a horizontal white line at the local minima of the vertical projection. this ensures
+    # that every connected component can intersect at most one text line.
+    for i in range(len(peak_locations) - 1):
+        start = peak_locations[i]
+        end = peak_locations[i + 1]
+        idx = smoothed_projection[start:end].index(min(smoothed_projection[start:end]))
+        idx += start
+        image_bin.draw_line((0, idx), (image_bin.ncols, idx), 0, 1)
 
     # perform connected component analysis and remove sufficiently small ccs and ccs that are too
     # tall; assume these to be ornamental letters
@@ -353,3 +362,13 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
         gap_sizes.append(right - left)
 
     return result, gap_sizes
+
+
+if __name__ == '__main__':
+    filename = 'salzinnes_17'
+    raw_image = gc.load_image('./png/' + filename + '_text.png')
+    image, staff_image = preprocess_images(raw_image, None)
+    cc_lines, lines_peak_locs = identify_text_lines(image)
+
+    im = image.to_greyscale().to_pil()
+    im.show()

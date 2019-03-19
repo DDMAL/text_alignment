@@ -1,5 +1,6 @@
 from rodan.jobs.base import RodanTask
 import gamera.core as gc
+import json
 import alignToOCR as align
 
 
@@ -52,11 +53,11 @@ class textAlignment(RodanTask):
         transcript = align.read_file(inputs['Transcript'][0]['resource_path'])
         raw_image = gc.load_image(inputs['Text Layer'][0]['resource_path'])
 
-        syls_boxes, _, lines_peak_locs = align.process(raw_image, transcript, wkdir_name='test')
-        test_string = str(syls_boxes)
+        syl_boxes, _, lines_peak_locs = align.process(raw_image, transcript, wkdir_name='test')
+        # test_string = str(syl_boxes)
 
         outfile_path = outputs['JSON'][0]['resource_path']
         with open(outfile_path, 'w') as file:
-            file.write(test_string)
+            json.dump(align.to_JSON_dict(syl_boxes, lines_peak_locs), file)
 
         return True

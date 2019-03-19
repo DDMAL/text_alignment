@@ -9,6 +9,7 @@ import numpy as np
 import textSeqCompare as tsc
 import latinSyllabification as latsyl
 import subprocess
+import json
 
 reload(preproc)
 reload(tsc)
@@ -18,10 +19,12 @@ ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
 
-# there are some hacks to make this work on windows. no guarantees, and OCRopus will probably
-# complain a lot. you will definitely have to use a model that is NOT zipped, or else go into the
+# there are some hacks to make this work on windows (locally, not as a rodan job!).
+# no guarantees, and OCRopus will throw out a lot of warning messages, but it does its job.
+
+# you will have to use a model that is NOT zipped, or else go into the
 # common.py file in ocrolib and change the way it's compressed from gunzip to gzip (gunzip is not
-# natively available on windows). also, parallel processing does not work on windows.
+# natively available on windows). also, parallel processing will not work.
 on_windows = (os.name == 'nt')
 
 
@@ -183,7 +186,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     #############################
 
     syls = latsyl.syllabify_text(transcript)
-    syls_boxes = []
+    syl_boxes = []
 
     # get bounding boxes for each syllable
     syl_pos = -1                        # track of which syllable trying to get box of
@@ -220,10 +223,27 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         # note that a syllable can be 'split,' in which case char_accumulator will have chars left in it
         if cur_syl in char_accumulator:
             char_accumulator = char_accumulator[len(cur_syl):]
-            syls_boxes.append((cur_syl, cur_ul, cur_lr))
+            syl_boxes.append((cur_syl, cur_ul, cur_lr))
             get_new_syl = True
 
-    return syls_boxes, image, lines_peak_locs
+    return syl_boxes, image, lines_peak_locs
+
+
+def to_JSON_dict(syl_boxes, lines_peak_locs):
+    med_line_spacing = np.quantile(np.diff(lines_peak_locs), 0.75)
+
+    data = {}
+    data['median_line_spacing'] = med_line_spacing
+    data['syl_boxes'] = []
+
+    for s in syl_boxes:
+        data['syl_boxes'].append({
+            'syl': s[0],
+            'ul': s[1],
+            'lr': s[2]
+        })
+
+    return data
 
 
 if __name__ == '__main__':
@@ -231,10 +251,13 @@ if __name__ == '__main__':
     import PIL
     from PIL import Image, ImageDraw, ImageFont
 
-    fname = 'salzinnes_16'
+    fname = 'salzinnes_17'
     raw_image = gc.load_image('./png/' + fname + '_text.png')
     transcript = read_file('./png/' + fname + '_transcript.txt')
-    syls_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
+    syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
+
+    with open('{}.json'.format(fname), 'w') as outjson:
+        json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
 
     #############################
     # -- DRAW RESULTS ON PAGE --
@@ -245,7 +268,7 @@ if __name__ == '__main__':
     fnt = ImageFont.truetype('Arial.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
-    for i, char in enumerate(syls_boxes):
+    for i, char in enumerate(syl_boxes):
         if char[0] in '. ':
             continue
 
