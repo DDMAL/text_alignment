@@ -5,6 +5,7 @@ gc.init_gamera()
 import textSeqCompare as tsc
 import alignToOCR as ocp
 from PIL import Image, ImageDraw, ImageFont
+import os
 reload(tsc)
 reload(ocp)
 

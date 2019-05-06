@@ -16,13 +16,6 @@ gap_extend_y = -4
 # display length
 line_len = 90
 
-# files
-files = ['einsiedeln_001r', 'einsiedeln_001v', 'einsiedeln_002r',
-    'einsiedeln_002v', 'einsiedeln_003r', 'einsiedeln_003v',
-    'salzinnes_15', 'salzinnes_17', 'stgall390_25',
-    'stmaurf_49r']
-
-
 def perform_alignment(transcript, ocr, verbose=False):
 
     # transcript = 'dafsad'

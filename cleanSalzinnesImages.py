@@ -19,7 +19,7 @@ pad_amt = 100
 def clean_image(input_image, despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=1, cc_min_size=50):
     '''
     modified version of preprocess_images from the preprocessing file; just intended to get
-    salzinnes in better shape for OCRopus training
+    salzinnes in better shape for OCRopus training, not used in rodan job
     '''
     image_bin = input_image.to_onebit()
     ccs = image_bin.cc_analysis()

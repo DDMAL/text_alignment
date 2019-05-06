@@ -102,6 +102,10 @@ def calculate_peak_prominence(data, index):
 
 
 def find_peak_locations(data, tol=prominence_tolerance, ranked=False):
+    '''
+    given a vertical projection in @data, finds prominent peaks and returns their indices
+    '''
+
     prominences = [(i, calculate_peak_prominence(data, i)) for i in range(len(data))]
 
     # normalize to interval [0,1]
@@ -147,6 +151,10 @@ def moving_avg_filter(data, filter_size=filter_size):
 def preprocess_images(input_image, staff_image=None,
                     sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
                     despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=1):
+    '''
+    use gamera to do some denoising, deskewing, etc on the text layer before attempting text line
+    segmentation
+    '''
 
     image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
     image_bin = input_image.to_onebit().subtract_images(image_sats)
@@ -182,6 +190,15 @@ def preprocess_images(input_image, staff_image=None,
 
 
 def identify_text_lines(image_bin):
+    '''
+    finds text lines on preprocessed image. step-by-step:
+    1. find peak locations of vertical projection
+    2. draw horizontal white lines between peak locations to make totally sure that lines are
+        unconnected (ornamental letters can often touch the line above them)
+    3. connected component analysis
+    4. break into neat rows of connected components that each intersect the same horizontal line
+    5. deal with some pathological cases (empty lines, doubled lines, etc)
+    '''
 
     # compute y-axis projection of input image and filter with sliding window average
     print('finding projection peaks...')
@@ -199,6 +216,17 @@ def identify_text_lines(image_bin):
         idx = smoothed_projection[start:end].index(min(smoothed_projection[start:end]))
         idx += start
         image_bin.draw_line((0, idx), (image_bin.ncols, idx), 0, 1)
+
+    # deriv = np.gradient(smoothed_projection)
+    # peaks_borders = [0] + peak_locations + [image_bin.nrows - 1]
+    # for i in range(1, len(peak_locations) + 1):
+    #     cur = peaks_borders[i]
+    #     next = peaks_borders[i+1]
+    #     prev = peaks_borders[i-1]
+    #     idx_ramp_up = np.argmax(deriv[prev:cur]) + prev
+    #     idx_ramp_down = np.argmin(deriv[cur:next]) + cur
+    #     image_bin.draw_line((0, idx_ramp_up), (image_bin.ncols, idx_ramp_up), 0, 1)
+    #     image_bin.draw_line((0, idx_ramp_down), (image_bin.ncols, idx_ramp_down), 0, 1)
 
     # perform connected component analysis and remove sufficiently small ccs and ccs that are too
     # tall; assume these to be ornamental letters
@@ -253,12 +281,12 @@ def identify_text_lines(image_bin):
     # remove all empty lines from cc_lines in case they've been created by previous steps
     cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-    return cc_lines, peak_locations
+    return cc_lines, peak_locations, smoothed_projection
 
 
 def find_ccs_under_staves(cc_lines, staff_image=None, max_distance_to_staff=max_distance_to_staff):
     '''
-    actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria
+    actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria (currently unused, but might be handy later)
     '''
 
     if not staff_image:
@@ -365,10 +393,10 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
 
 
 if __name__ == '__main__':
-    filename = 'salzinnes_17'
+    filename = 'salzinnes_18'
     raw_image = gc.load_image('./png/' + filename + '_text.png')
     image, staff_image = preprocess_images(raw_image, None)
-    cc_lines, lines_peak_locs = identify_text_lines(image)
+    cc_lines, lines_peak_locs, proj = identify_text_lines(image)
 
     im = image.to_greyscale().to_pil()
     im.show()

@@ -20,18 +20,18 @@ parallel = 2
 median_line_mult = 2
 
 # there are some hacks to make this work on windows (locally, not as a rodan job!).
-# no guarantees, and OCRopus will throw out a lot of warning messages, but it does its job.
-
+# no guarantees, and OCRopus will throw out a lot of warning messages, but it works for local dev.
 # you will have to use a model that is NOT zipped, or else go into the
 # common.py file in ocrolib and change the way it's compressed from gunzip to gzip (gunzip is not
 # natively available on windows). also, parallel processing will not work.
 on_windows = (os.name == 'nt')
 
 
-# removes some special characters from OCR output. ideally these would be useful but not clear how
-# best to integrate them into the alignment algorithm. unidecode doesn't seem to work with these
-# either
 def clean_special_chars(inp):
+    '''
+    removes some special characters from OCR output. ideally these would be useful but not clear how
+    best to integrate them into the alignment algorithm. unidecode doesn't seem like these either
+    '''
     inp = inp.replace('~', '')
     inp = inp.replace('\xc4\x81', 'a')
     inp = inp.replace('\xc4\x93', 'e')
@@ -42,6 +42,9 @@ def clean_special_chars(inp):
 
 
 def read_file(fname):
+    '''
+    helper function for reading a plaintext transcript of a manuscript page
+    '''
     file = open(fname, 'r')
     lines = file.readlines()
     file.close()
@@ -54,6 +57,12 @@ def read_file(fname):
 
 
 def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=False):
+    '''
+    given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
+    and OCR on the text layer and then aligns the results to the transcript text.
+    '''
+
+
 
     #######################
     # -- PRE-PROCESSING --
@@ -62,7 +71,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     # get raw image of text layer and preform preprocessing to find text lines
     # raw_image = gc.load_image('./png/' + filename + '_text.png')
     image, staff_image = preproc.preprocess_images(raw_image, None)
-    cc_lines, lines_peak_locs = preproc.identify_text_lines(image)
+    cc_lines, lines_peak_locs, _ = preproc.identify_text_lines(image)
 
     # get bounding box around each line, with padding
     cc_strips = []
@@ -230,6 +239,10 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
 
 
 def to_JSON_dict(syl_boxes, lines_peak_locs):
+    '''
+    turns the output of the process script into a JSON dict that can be passed into the MEI_encoding
+    rodan job.
+    '''
     med_line_spacing = np.quantile(np.diff(lines_peak_locs), 0.75)
 
     data = {}
@@ -251,7 +264,7 @@ if __name__ == '__main__':
     import PIL
     from PIL import Image, ImageDraw, ImageFont
 
-    fname = 'salzinnes_17'
+    fname = 'salzinnes_36'
     raw_image = gc.load_image('./png/' + fname + '_text.png')
     transcript = read_file('./png/' + fname + '_transcript.txt')
     syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')

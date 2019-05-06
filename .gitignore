@@ -1,4 +1,5 @@
 *.rng
+*.json
 pip-selfcheck*
 gamera-3.4.3*
 CF-*
