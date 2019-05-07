@@ -62,8 +62,6 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     and OCR on the text layer and then aligns the results to the transcript text.
     '''
 
-
-
     #######################
     # -- PRE-PROCESSING --
     #######################
