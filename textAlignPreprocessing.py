@@ -1,6 +1,5 @@
 from os.path import isfile, join
 import numpy as np
-import PIL as pil  # python imaging library, for testing only
 import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
@@ -217,17 +216,6 @@ def identify_text_lines(image_bin):
         idx += start
         image_bin.draw_line((0, idx), (image_bin.ncols, idx), 0, 1)
 
-    # deriv = np.gradient(smoothed_projection)
-    # peaks_borders = [0] + peak_locations + [image_bin.nrows - 1]
-    # for i in range(1, len(peak_locations) + 1):
-    #     cur = peaks_borders[i]
-    #     next = peaks_borders[i+1]
-    #     prev = peaks_borders[i-1]
-    #     idx_ramp_up = np.argmax(deriv[prev:cur]) + prev
-    #     idx_ramp_down = np.argmin(deriv[cur:next]) + cur
-    #     image_bin.draw_line((0, idx_ramp_up), (image_bin.ncols, idx_ramp_up), 0, 1)
-    #     image_bin.draw_line((0, idx_ramp_down), (image_bin.ncols, idx_ramp_down), 0, 1)
-
     # perform connected component analysis and remove sufficiently small ccs and ccs that are too
     # tall; assume these to be ornamental letters
     print('connected component analysis...')
@@ -286,7 +274,10 @@ def identify_text_lines(image_bin):
 
 def find_ccs_under_staves(cc_lines, staff_image=None, max_distance_to_staff=max_distance_to_staff):
     '''
-    actual musical text must have a staff immediately above it and should NOT be on the same horizontal position as any staves. this function checks every connected component in cc_lines and removes those that do not meet these criteria (currently unused, but might be handy later)
+    actual musical text must have a staff immediately above it and should NOT be on the same
+    horizontal position as any staves. this function checks every connected component in cc_lines
+    and removes those that do not meet these criteria
+    (currently unused, but might be handy later)
     '''
 
     if not staff_image:
@@ -356,8 +347,6 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
     '''
     a helper function that takes in a list of ccs on the same line and groups them together based
     on contiguity of their bounding boxes along the horizontal axis.
-
-    change: instead of bounding boxes, consider vertical projection of adjacent ccs
     '''
 
     cc_copy = cc_list[:]
@@ -393,10 +382,33 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
 
 
 if __name__ == '__main__':
-    filename = 'salzinnes_18'
-    raw_image = gc.load_image('./png/' + filename + '_text.png')
+    from PIL import Image, ImageDraw, ImageFont
+
+    fname = 'salzinnes_18'
+    raw_image = gc.load_image('./png/' + fname + '_text.png')
     image, staff_image = preprocess_images(raw_image, None)
     cc_lines, lines_peak_locs, proj = identify_text_lines(image)
 
-    im = image.to_greyscale().to_pil()
+    # color discovered CCS with unique colors
+    ccs = [j for i in cc_lines for j in i]
+    image = image.graph_color_ccs(ccs, None, 1)
+    im = image.to_pil()
+
+    text_size = 70
+    fnt = ImageFont.truetype('FreeMono.ttf', text_size)
+    draw = ImageDraw.Draw(im)
+
+    # draw lines at identified peak locations
+    for i, peak_loc in enumerate(lines_peak_locs):
+        draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
+        draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
+
+    # draw rectangles around identified text lines
+    for line in cc_lines:
+        unioned = union_images(line)
+        ul = (unioned.ul.x, unioned.ul.y)
+        lr = (unioned.lr.x, unioned.lr.y)
+        draw.rectangle([ul, lr], outline='black')
+
     im.show()
+    im.save('test_preproc_{}.png'.format(fname))
