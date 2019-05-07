@@ -257,26 +257,10 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
     return data
 
 
-if __name__ == '__main__':
-
-    import PIL
-    from PIL import Image, ImageDraw, ImageFont
-
-    fname = 'salzinnes_36'
-    raw_image = gc.load_image('./png/' + fname + '_text.png')
-    transcript = read_file('./png/' + fname + '_transcript.txt')
-    syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
-
-    with open('{}.json'.format(fname), 'w') as outjson:
-        json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
-
-    #############################
-    # -- DRAW RESULTS ON PAGE --
-    #############################
-
+def draw_results_on_page(image, syl_boxes, lines_peak_locs):
     im = image.to_greyscale().to_pil()
     text_size = 70
-    fnt = ImageFont.truetype('Arial.ttf', text_size)
+    fnt = ImageFont.truetype('FreeMono.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
     for i, char in enumerate(syl_boxes):
@@ -294,4 +278,30 @@ if __name__ == '__main__':
         draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
     im.save('testimg_{}.png'.format(fname))
-    im.show()
+    # im.show()
+
+
+if __name__ == '__main__':
+
+    import PIL
+    from PIL import Image, ImageDraw, ImageFont
+    import os
+
+    f_inds = range(15, 40)
+    for f_ind in f_inds:
+        fname = 'salzinnes_{}'.format(f_ind)
+        text_layer_fname = './png/{}_text.png'.format(fname)
+        transcript_fname = './png/{}_transcript.txt'.format(fname)
+
+        if not os.path.isfile(text_layer_fname) or not os.path.isfile(transcript_fname):
+            print('cannot find files for {}.'.format(fname))
+            continue
+
+        print('processing {}...'.format(fname))
+        raw_image = gc.load_image('./png/' + fname + '_text.png')
+        transcript = read_file('./png/' + fname + '_transcript.txt')
+        syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
+
+        with open('{}.json'.format(fname), 'w') as outjson:
+            json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
+        draw_results_on_page(image, syl_boxes, lines_peak_locs)
