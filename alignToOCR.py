@@ -27,6 +27,32 @@ median_line_mult = 2
 on_windows = (os.name == 'nt')
 
 
+class CharBox(object):
+    __slots__ = ['char', 'ul', 'lr', 'ulx', 'lrx', 'uly', 'lry', 'width', 'height']
+
+    def __init__(self, char, ul=None, lr=None):
+
+        self.char = char
+        if not ul and not lr:
+            self.ul = None
+            self.lr = None
+            return
+        self.ul = ul
+        self.lr = lr
+        self.ulx = ul[0]
+        self.lrx = lr[0]
+        self.uly = ul[1]
+        self.lry = lr[1]
+        self.width = lr[0] - ul[0]
+        self.height = lr[1] - ul[1]
+
+    def __repr__(self):
+        if self.ul and self.lr:
+            return '{}: {}, {}'.format(self.char, self.ul, self.lr)
+        else:
+            return '{}: empty'.format(self.char)
+
+
 def clean_special_chars(inp):
     '''
     removes some special characters from OCR output. ideally these would be useful but not clear how
@@ -56,7 +82,7 @@ def read_file(fname):
     return lines
 
 
-def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=False):
+def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=True):
     '''
     given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
     and OCR on the text layer and then aligns the results to the transcript text.
@@ -138,9 +164,12 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
             lr = (cur_xpos, y_max)
 
             if lsp[0] == '~' or lsp[0] == '':
-                other_chars.append((lsp[0], ul, lr))
+                new_box = CharBox(lsp[0], ul, lr)
+                other_chars.append(new_box)
             else:
-                all_chars.append((clean_special_chars(lsp[0]), ul, lr))
+                # all_chars.append((clean_special_chars(lsp[0]), ul, lr))
+                new_box = CharBox(clean_special_chars(lsp[0]), ul, lr)
+                all_chars.append(new_box)
 
             prev_xpos = cur_xpos
 
@@ -151,42 +180,43 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         subprocess.check_call('rm -r ' + dir, shell=True)
 
     # get full ocr transcript
-    ocr = ''.join(x[0] for x in all_chars)
+    ocr = ''.join(x.char for x in all_chars)
     all_chars_copy = list(all_chars)
 
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
-
     tra_align, ocr_align = tsc.perform_alignment(transcript, ocr, verbose=verbose)
 
-    align_transcript_chars = []
+    align_transcript_boxes = []
 
     # insert gaps into ocr output based on alignment string. this causes all_chars to have gaps at the
     # same points as the ocr_align string does, and is thus the same length as tra_align.
     for i, char in enumerate(ocr_align):
         if char == '_':
-            all_chars.insert(i, ('_', 0, 0))
+            all_chars.insert(i, CharBox('_'))
 
     # this could very possibly go wrong (special chars, bug in alignment algorithm, etc) so better
     # make sure that this condition is holding at this point
-    assert len(all_chars) == len(tra_align), 'all_chars not same length as alignment'
+    assert len(all_chars) == len(tra_align), 'all_chars not same length as alignment: ' \
+        '{} vs {}'.format(len(all_chars), len(tra_align))
 
-    for i, ocr_char in enumerate(all_chars):
+    for i, ocr_box in enumerate(all_chars):
         tra_char = tra_align[i]
+        # print(len(align_transcript_boxes), tra_char, ocr_box)
 
-        if not (tra_char == '_' or ocr_char[0] == '_'):
-            align_transcript_chars.append([tra_char, ocr_char[1], ocr_char[2]])
-        elif (tra_char != '_') and align_transcript_chars:
-            align_transcript_chars[-1][0] += tra_char
+        if not (tra_char == '_' or ocr_box.char == '_'):
+            align_transcript_boxes.append(CharBox(tra_char, ocr_box.ul, ocr_box.lr))
+        elif (tra_char != '_') and align_transcript_boxes:
+            align_transcript_boxes[-1].char += tra_char
         elif (tra_char != '_'):
             # a tricky case: what if the first letter of the transcript is assigned to a gap?
             # then just kinda... prepend it onto the next letter. this looks bad.
-            next_char = all_chars[i+1]
-            char_width = next_char[2][0] - next_char[1][0]
-            new_ul = (max(next_char[1][0] - char_width, 0), next_char[1][1])
-            new_lr = (max(next_char[2][0] - char_width, 0), next_char[2][1])
-            align_transcript_chars.append([tra_char, new_ul, new_lr])
+            next_box = [x for x in all_chars[i:] if not x.char == '_'][0]
+            char_width = next_box.width
+            new_ul = (max(next_box.ulx - char_width, 0), next_box.uly)
+            new_lr = (max(next_box.lrx - char_width, 0), next_box.lry)
+            align_transcript_boxes.append(CharBox(tra_char, new_ul, new_lr))
 
     #############################
     # -- GROUP INTO SYLLABLES --
@@ -201,9 +231,9 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     get_new_syl = True                  # flag that next loop should start a new syllable
     cur_ul = 0                          # upper-left point of last unassigned character
     cur_lr = 0                          # lower-right point of last character in loop
-    for c in align_transcript_chars:    # @c can have more than one char in c[0].
+    for box in align_transcript_boxes:    # @c can have more than one char in c[0].
 
-        char_text = c[0].replace(' ', '')
+        char_text = box.char.replace(' ', '')
         if not char_text:
             continue
 
@@ -211,19 +241,19 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
             get_new_syl = False
             syl_pos += 1
             cur_syl = syls[syl_pos]
-            cur_ul = c[1]
+            cur_ul = box.ul
 
         # we'd rather not a syllable cross between lines. so, if it looks like that's about to happen
         # just forget about the part on the upper line and restart on the lower one.
-        cur_lr = c[2]
-        new_y_coord = c[1][1]
+        cur_lr = box.lr
+        new_y_coord = box.uly
         if new_y_coord > cur_ul[1]:
-            cur_ul = c[1]
+            cur_ul = box.ul
 
         char_accumulator += char_text
 
-        if verbose:
-            print (cur_syl, char_accumulator, cur_ul, cur_lr)
+        # if verbose:
+        #     print(cur_syl, char_accumulator, cur_ul, cur_lr)
 
         # if the accumulator has got the current syllable in it, remove the current syllable
         # from the accumulator and assign that syllable to the bounding box between cur_ul and cur_lr.
@@ -259,7 +289,7 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
 
 def draw_results_on_page(image, syl_boxes, lines_peak_locs):
     im = image.to_greyscale().to_pil()
-    text_size = 70
+    text_size = 50
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
@@ -287,9 +317,10 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    f_inds = range(15, 40)
-    for f_ind in f_inds:
-        fname = 'salzinnes_{}'.format(f_ind)
+    f_inds = range(0, 5)
+    fnames = ['einsiedeln_00{}r'.format(f_ind) for f_ind in f_inds]
+
+    for fname in fnames:
         text_layer_fname = './png/{}_text.png'.format(fname)
         transcript_fname = './png/{}_transcript.txt'.format(fname)
 
