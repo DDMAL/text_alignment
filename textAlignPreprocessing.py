@@ -384,7 +384,7 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
 if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
 
-    fname = 'salzinnes_18'
+    fname = 'einsiedeln_003v'
     raw_image = gc.load_image('./png/' + fname + '_text.png')
     image, staff_image = preprocess_images(raw_image, None)
     cc_lines, lines_peak_locs, proj = identify_text_lines(image)
@@ -412,3 +412,9 @@ if __name__ == '__main__':
 
     im.show()
     im.save('test_preproc_{}.png'.format(fname))
+
+    plt.clf()
+    plt.plot(proj)
+    for x in lines_peak_locs:
+        plt.axvline(x=x, linestyle=':')
+    plt.show()

@@ -158,7 +158,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         prev_xpos = x_min
         for l in locs:
             lsp = l.split('\t')
-            cur_xpos = float(lsp[1]) + x_min
+            cur_xpos = int(np.round(float(lsp[1]) + x_min))
 
             ul = (prev_xpos, y_min)
             lr = (cur_xpos, y_max)
@@ -318,7 +318,7 @@ if __name__ == '__main__':
     import os
 
     f_inds = range(0, 5)
-    fnames = ['einsiedeln_00{}r'.format(f_ind) for f_ind in f_inds]
+    fnames = ['einsiedeln_00{}v'.format(f_ind) for f_ind in f_inds]
 
     for fname in fnames:
         text_layer_fname = './png/{}_text.png'.format(fname)
