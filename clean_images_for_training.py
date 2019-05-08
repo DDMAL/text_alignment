@@ -11,12 +11,8 @@ import re
 import textAlignPreprocessing as preproc
 reload(preproc)
 
-despeckle_amt = 25
-filename = 'salzinnes_11'
-pad_amt = 100
 
-
-def clean_image(input_image, despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=1, cc_min_size=50):
+def clean_image(input_image, despeckle_amt=25, filter_runs=1, filter_runs_amt=1, cc_min_size=50):
     '''
     modified version of preprocess_images from the preprocessing file; just intended to get
     salzinnes in better shape for OCRopus training, not used in rodan job
@@ -46,8 +42,9 @@ def clean_image(input_image, despeckle_amt=despeckle_amt, filter_runs=1, filter_
 
 if __name__ == '__main__':
 
+    manuscript = 'salzinnes'
     all_files = os.listdir('./png/')
-    fnames = [x for x in all_files if 'text.png' in x and 'salzinnes' in x]
+    fnames = [x for x in all_files if 'text.png' in x and manuscript in x]
 
     for filename in fnames:
         print('processing ' + filename + '...')
@@ -57,5 +54,4 @@ if __name__ == '__main__':
         cc_lines, peaks_locs = preproc.identify_text_lines(img)
         cc_lines_flat = [item for sublist in cc_lines for item in sublist]
         unioned_lines = union_images(cc_lines_flat)
-        # unioned_lines = unioned_lines.pad_image(pad_amt, pad_amt, pad_amt, pad_amt)
         unioned_lines.save_image('cleaned_' + filename)

@@ -1,4 +1,4 @@
-# cantus-alignment
+# text-alignment
 
 Given an image of the text layer of a chant manuscript, and a transcript of text that lies entirely within that manuscript, finds the position of each syllable of that text on the page.
 
@@ -21,7 +21,7 @@ The input text layer can be pretty messy, so we need to clean it up a bit - this
 
 ### OCR with OCRopus
 
-OCRopus is not intended for use on handwritten text, but it gets a reasonably good result (80-90% per-character accuracy on most pages of Salzinnes using the relativelymodel included with this repo). Each identified text line is saved to a file, and the OCRopus command line tool ```ocropus-rpred``` is used to attempt OCR on each one, retrieving the characters found within the line and the position of each one on the page.
+OCRopus is not intended for use on handwritten text, but it gets a reasonably good result (80-90% per-character accuracy on most pages of Salzinnes using the relatively simple model included with this repo). Each identified text line is saved to a file, and the OCRopus command line tool ```ocropus-rpred``` is used to attempt OCR on each one, retrieving the characters found within the line and the position of each one on the page.
 
 ### Aligning OCR with Correct Transcript
 
@@ -48,3 +48,7 @@ syl_boxes:[{
 } ... ],
 median_line_spacing: [median space between adjacent text lines, in pixels]
 ```
+
+# Training a New OCRopus model
+
+Use ```clean_images_for_training.py``` to generate a set of text lines from manuscript data. Then use ```ocropus-gtedit``` to create a ```temp-correction.html``` file - then you can start manually transcribing each text line. You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For Salzinnes, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was more than enough. Once you've transcribed enough, use ```ocropus-gtedit extract temp-correction.html``` to extract the information in the file and the ```ocropus-rtrain``` tool to train a model on the extracted data. You may want to specify a custom character set if your model uses a lot of special characters. Further information: [OCRopus getting started guide](https://github.com/digiah/oldOCR/blob/master/ocropy_getting_started.pdf)
