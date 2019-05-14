@@ -4,7 +4,7 @@ import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
-from gamera.plugins.geometry import hough_lines
+from gamera.plugins.pagesegmentation import textline_reading_order
 import itertools as iter
 import os
 import re
@@ -413,7 +413,6 @@ def smear_lines(image, points_factor=0.005):
     # remove smeared rows that are too short
     med_smear_height = np.median([c.nrows for c in smear])
     smear = [s for s in smear if s.nrows >= med_smear_height / 2]
-
     overlap_thresh = int(med_smear_height / 2)
 
     for a, b in iter.product(smear, smear):
@@ -430,7 +429,7 @@ def smear_lines(image, points_factor=0.005):
             continue
         left_mid = gc.Point((a.lr_x + a.ul_x) // 2, (a.lr_y + a.ur_y) // 2)
         right_mid = gc.Point((b.lr_x + b.ul_x) // 2, (b.ll_y + b.ul_y) // 2)
-        filt.draw_line(left_mid, right_mid, 1, 10)
+        # filt.draw_line(left_mid, right_mid, 1, 10)
 
     filt.reset_onebit_image()
     smear = filt.cc_analysis()
@@ -442,6 +441,26 @@ def smear_lines(image, points_factor=0.005):
     add = (imp + flp) / 2
     comb = Image.fromarray(add.astype('uint8'))
     return comb
+
+
+def strip_projections(image, num_strips=30):
+
+    bottom_contour = image.contour_bottom()
+    left_side = min([i for i in range(len(bottom_contour) - 1)
+        if bottom_contour[i + 1] != np.inf
+        and bottom_contour[i] == np.inf])
+    right_side = max([i for i in range(len(bottom_contour) - 1)
+        if bottom_contour[i + 1] == np.inf
+        and bottom_contour[i] != np.inf])
+
+    vert_strips = []
+    strip_dim = gc.Dim(1 + (right_side - left_side) // num_strips, image.height)
+    for i in range(num_strips):
+        ul = gc.Point(left_side + strip_dim.ncols * i, 0)
+        subimg = image.subimage(ul, strip_dim)
+        vert_strips.append(subimg)
+
+    strip_projections = [x.projection_rows() for x in vert_strips]
 
 
 
