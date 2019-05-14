@@ -4,6 +4,7 @@ import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
+from gamera.plugins.geometry import hough_lines
 import itertools as iter
 import os
 import re
@@ -23,6 +24,15 @@ remove_capitals_scale = 10000   # removes large ccs. turned off for now
 # CC GROUPING (BLOBS)
 cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
 max_distance_to_staff = 200
+
+# i need a custom set of colors when working on cc analysis because i'm too colorblind for the default :(
+colors = [ gc.RGBPixel(150, 0, 0),
+           gc.RGBPixel(0, 100, 0),
+           gc.RGBPixel(0, 0, 255),
+           gc.RGBPixel(250, 0, 255),
+           gc.RGBPixel(50, 150, 50),
+           gc.RGBPixel(0, 190, 230),
+           gc.RGBPixel(230, 100, 20) ]
 
 
 def vertically_coincide(hline_position, comp_offset, comp_nrows, collision, collision_scale=collision_strip_scale):
@@ -381,12 +391,70 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
     return result, gap_sizes
 
 
+def smear_lines(image, points_factor=0.005):
+    imc = image.image_copy()
+    print('connected component analysis...')
+    components = imc.cc_analysis()
+
+    for c in components:
+        if c.black_area()[0] < noise_area_thresh:
+            c.fill_white()
+    med_comp_width = int(np.median([c.ncols for c in components
+        if c.black_area()[0] > noise_area_thresh]))
+
+    filt = imc.image_copy()
+    filt.reset_onebit_image()
+
+    filt.filter_narrow_runs(med_comp_width, 'white')
+    filt.filter_narrow_runs(med_comp_width, 'black')
+
+    smear = filt.cc_analysis()
+
+    # remove smeared rows that are too short
+    med_smear_height = np.median([c.nrows for c in smear])
+    smear = [s for s in smear if s.nrows >= med_smear_height / 2]
+
+    overlap_thresh = int(med_smear_height / 2)
+
+    for a, b in iter.product(smear, smear):
+        # ensure that a is to the left of b on the page
+        if a.lr_x > b.ul_x:
+            continue
+        # ensure that their midpoints are less than a line width apart
+        # if abs((a.lr_y + a.ul_y) - (b.lr_y + b.ul_y)) > 2 * med_smear_height:
+        #     continue
+        # ensure that a horizontally overlaps b
+        overlap_amt = min(a.lr_y - b.ul_y, b.ll_y - a.ur_y)
+        # print(overlap_amt)
+        if overlap_amt < overlap_thresh:
+            continue
+        left_mid = gc.Point((a.lr_x + a.ul_x) // 2, (a.lr_y + a.ur_y) // 2)
+        right_mid = gc.Point((b.lr_x + b.ul_x) // 2, (b.ll_y + b.ul_y) // 2)
+        filt.draw_line(left_mid, right_mid, 1, 10)
+
+    filt.reset_onebit_image()
+    smear = filt.cc_analysis()
+
+    filt_color = filt.graph_color_ccs(smear, colors, 1)
+
+    imp = imc.to_rgb().to_numpy().astype('float')
+    flp = filt_color.to_rgb().to_numpy().astype('float')
+    add = (imp + flp) / 2
+    comb = Image.fromarray(add.astype('uint8'))
+    return comb
+
+
+
 if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
 
-    fname = 'einsiedeln_003v'
+    fname = 'salzinnes_12'
+
     raw_image = gc.load_image('./png/' + fname + '_text.png')
     image, staff_image = preprocess_images(raw_image, None)
+    smear_res = smear_lines(image)
+    smear_res.save('test_smear_{}.png'.format(fname))
+    exit()
     cc_lines, lines_peak_locs, proj = identify_text_lines(image)
 
     # color discovered CCS with unique colors
