@@ -33,12 +33,12 @@ class CharBox(object):
     def __init__(self, char, ul=None, lr=None):
 
         self.char = char
-        if not ul and not lr:
+        if (ul is None) or (lr is None):
             self.ul = None
             self.lr = None
             return
-        self.ul = ul
-        self.lr = lr
+        self.ul = tuple(ul)
+        self.lr = tuple(lr)
         self.ulx = ul[0]
         self.lrx = lr[0]
         self.uly = ul[1]
@@ -82,6 +82,43 @@ def read_file(fname):
     return lines
 
 
+def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
+    pivot = gc.Point(orig_dim.ncols / 2, orig_dim.nrows / 2)
+
+    # amount to translate to compensate for padding added by gamera's rotation in preprocessing
+    dx = (orig_dim.ncols - target_dim.ncols) / 2
+    dy = (orig_dim.nrows - target_dim.nrows) / 2
+
+    if not radians:
+        angle = angle * np.pi / 180
+
+    s = np.sin(angle)
+    c = np.cos(angle)
+
+    # move to origin
+    old_ulx = cbox.ulx - pivot.x
+    old_uly = cbox.uly - pivot.y
+    old_lrx = cbox.lrx - pivot.x
+    old_lry = cbox.lry - pivot.y
+
+    # rotate using a 2d rotation matrix
+    new_ulx = (old_ulx * c) - (old_uly * s)
+    new_uly = (old_ulx * s) + (old_uly * c)
+    new_lrx = (old_lrx * c) - (old_lry * s)
+    new_lry = (old_lrx * s) + (old_lry * c)
+
+    # move back to original position adjusted for padding
+    new_ulx += (pivot.x - dx)
+    new_uly += (pivot.y - dy)
+    new_lrx += (pivot.x - dx)
+    new_lry += (pivot.y - dy)
+
+    new_ul = np.round([new_ulx, new_uly]).astype('int16')
+    new_lr = np.round([new_lrx, new_lry]).astype('int16')
+
+    return CharBox(cbox.char, new_ul, new_lr)
+
+
 def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=True):
     '''
     given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
@@ -94,7 +131,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
 
     # get raw image of text layer and preform preprocessing to find text lines
     # raw_image = gc.load_image('./png/' + filename + '_text.png')
-    image, staff_image = preproc.preprocess_images(raw_image, None)
+    image, angle = preproc.preprocess_images(raw_image, None)
     cc_lines, lines_peak_locs, _ = preproc.identify_text_lines(image)
 
     # get bounding box around each line, with padding
@@ -260,8 +297,12 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         # note that a syllable can be 'split,' in which case char_accumulator will have chars left in it
         if cur_syl in char_accumulator:
             char_accumulator = char_accumulator[len(cur_syl):]
-            syl_boxes.append((cur_syl, cur_ul, cur_lr))
+            syl_boxes.append(CharBox(cur_syl, cur_ul, cur_lr))
             get_new_syl = True
+
+    # finally, rotate syl_boxes back by the angle that the page was rotated by
+    for i in range(len(syl_boxes)):
+        syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, image.dim, raw_image.dim)
 
     return syl_boxes, image, lines_peak_locs
 
@@ -279,9 +320,9 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
 
     for s in syl_boxes:
         data['syl_boxes'].append({
-            'syl': s[0],
-            'ul': s[1],
-            'lr': s[2]
+            'syl': s.char,
+            'ul': str(s.ul),
+            'lr': str(s.lr)
         })
 
     return data
@@ -293,13 +334,13 @@ def draw_results_on_page(image, syl_boxes, lines_peak_locs):
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
-    for i, char in enumerate(syl_boxes):
-        if char[0] in '. ':
+    for i, cbox in enumerate(syl_boxes):
+        if cbox.char in '. ':
             continue
 
-        ul = char[1]
-        lr = char[2]
-        draw.text((ul[0], ul[1] - text_size), char[0], font=fnt, fill='gray')
+        ul = cbox.ul
+        lr = cbox.lr
+        draw.text((ul[0], ul[1] - text_size), cbox.char, font=fnt, fill='gray')
         draw.rectangle([ul, lr], outline='black')
         draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
 
@@ -317,7 +358,7 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    f_inds = range(0, 5)
+    f_inds = [3]
     fnames = ['einsiedeln_00{}v'.format(f_ind) for f_ind in f_inds]
 
     for fname in fnames:
@@ -333,6 +374,9 @@ if __name__ == '__main__':
         transcript = read_file('./png/' + fname + '_transcript.txt')
         syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
 
+        # rot_img = raw_image.image_copy()
+        # rot_img = rot_img.rotate(angle=angle, bgcolor=0)
+
         with open('{}.json'.format(fname), 'w') as outjson:
             json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
-        draw_results_on_page(image, syl_boxes, lines_peak_locs)
+        draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)

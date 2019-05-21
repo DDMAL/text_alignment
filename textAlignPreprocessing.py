@@ -4,7 +4,8 @@ import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
-from gamera.plugins.pagesegmentation import textline_reading_order
+from gamera import graph_util
+from gamera import graph
 import itertools as iter
 import os
 import re
@@ -150,16 +151,16 @@ def moving_avg_filter(data, filter_size=filter_size):
     @filter_size to either side; that is, filter_size = 1 gives a size of 3, filter size = 2 gives
     a size of 5, and so on.
     '''
-    smoothed = [0] * len(data)
+    smoothed = np.zeros(len(data))
     for n in range(filter_size, len(data) - filter_size):
         vals = data[n - filter_size: n + filter_size + 1]
         smoothed[n] = np.mean(vals)
     return smoothed
 
 
-def preprocess_images(input_image, staff_image=None,
+def preprocess_images(input_image,
                     sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
-                    despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=1):
+                    despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=3):
     '''
     use gamera to do some denoising, deskewing, etc on the text layer before attempting text line
     segmentation
@@ -176,26 +177,23 @@ def preprocess_images(input_image, staff_image=None,
             c.fill_white()
 
     image_bin = input_image.to_onebit().subtract_images(image_bin)
-    image_bin.invert()
-    image_bin.despeckle(despeckle_amt)
-    image_bin.invert()
-    image_bin.reset_onebit_image()
 
-    # find likely rotation angle and correct (this is disabled for now)
-    # angle, tmp = image_bin.rotation_angle_projections()
-    # image_bin = image_bin.rotate(angle=angle)
+    # find likely rotation angle and correct
+    angle, tmp = image_bin.rotation_angle_projections()
+    print(angle)
+    image_bin = image_bin.rotate(angle=angle)
 
     for i in range(filter_runs):
         image_bin.filter_short_runs(filter_runs_amt, 'black')
         image_bin.filter_narrow_runs(filter_runs_amt, 'black')
 
-    if staff_image:
-        staff_image = staff_image.to_onebit()
-        # staff_image = staff_image.rotate(angle=angle)
-        staff_image.despeckle(despeckle_amt)
-        staff_image.filter_narrow_runs(1000, 'white')
+    image_bin.despeckle(despeckle_amt)
+    image_bin.invert()
+    image_bin.despeckle(despeckle_amt)
+    image_bin.invert()
+    image_bin.reset_onebit_image()
 
-    return image_bin, staff_image
+    return image_bin, angle
 
 
 def identify_text_lines(image_bin):
@@ -222,7 +220,7 @@ def identify_text_lines(image_bin):
     for i in range(len(peak_locations) - 1):
         start = peak_locations[i]
         end = peak_locations[i + 1]
-        idx = smoothed_projection[start:end].index(min(smoothed_projection[start:end]))
+        idx = np.argmin(smoothed_projection[start:end])
         idx += start
         image_bin.draw_line((0, idx), (image_bin.ncols, idx), 0, 1)
 
@@ -282,77 +280,6 @@ def identify_text_lines(image_bin):
     return cc_lines, peak_locations, smoothed_projection
 
 
-def find_ccs_under_staves(cc_lines, staff_image=None, max_distance_to_staff=max_distance_to_staff):
-    '''
-    actual musical text must have a staff immediately above it and should NOT be on the same
-    horizontal position as any staves. this function checks every connected component in cc_lines
-    and removes those that do not meet these criteria
-    (currently unused, but might be handy later)
-    '''
-
-    if not staff_image:
-        return cc_lines
-
-    proj = moving_avg_filter(staff_image.projection_rows())
-    staff_peaks = find_peak_locations(proj)
-
-    cc_lines_flat = reduce((lambda x, y: x + y), cc_lines)
-    staff_ccs = staff_image.cc_analysis()
-    longest_line = max([x.ncols for x in staff_ccs])
-    # staff_ccs[:] = [x for x in staff_ccs if x.ncols > min_line_length_scale * longest_line]
-
-    # first filter out all ccs not directly below a staff
-    # for every cc, bring a line down across the whole page thru its center.
-    for i in reversed(range(len(cc_lines))):
-
-        to_remove = set()
-
-        for j in range(len(cc_lines[i])):
-            cur_comp = cc_lines[i][j]
-            comp_center_h = cur_comp.offset_x + (cur_comp.ncols / 2)
-
-            # all staff lines that cross this vertical line, above or below
-            lines_cross = [x for x in staff_ccs if
-                x.offset_x <= comp_center_h <= x.offset_x + x.ncols]
-
-            # all other components that cross this vertical line, above or below
-            ccs_cross = [x for x in cc_lines_flat if
-                x.offset_x <= comp_center_h <= x.offset_x + x.ncols]
-
-            # find vertical position of first staff line above this component
-            lines_cross_above = [x.offset_y for x in lines_cross if
-                x.offset_y < cur_comp.offset_y]
-            closest_line_pos = max(lines_cross_above + [0])
-
-            # find vertical position of first other component above this component
-            lines_cross_above = [x.offset_y for x in ccs_cross if
-                x.offset_y < cur_comp.offset_y]
-            closest_cc_pos = max(lines_cross_above + [0])
-
-            # print(closest_cc_pos, closest_line_pos, cur_comp.offset_y)
-            distance_to_staff = cur_comp.offset_y - closest_line_pos
-
-            if (closest_cc_pos > closest_line_pos
-                    or closest_line_pos == 0
-                    or distance_to_staff > max_distance_to_staff):
-                to_remove.add(cur_comp)
-
-            # next, remove everything horizontally aligned with a staff
-
-            comp_center_v = cur_comp.offset_y + (cur_comp.nrows / 2)
-            lines_cross_h = min([abs(x - comp_center_v) for x in staff_peaks])
-
-            if lines_cross_h > max_distance_to_staff:
-                to_remove.add(cur_comp)
-
-        for tr in to_remove:
-            cc_lines[i].remove(tr)
-
-    cc_lines[:] = [x for x in cc_lines if bool(x)]
-
-    return cc_lines
-
-
 def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
     '''
     a helper function that takes in a list of ccs on the same line and groups them together based
@@ -392,21 +319,29 @@ def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
 
 
 def smear_lines(image, points_factor=0.005):
-    imc = image.image_copy()
+    filt = image.image_copy()
     print('connected component analysis...')
-    components = imc.cc_analysis()
+    components = filt.cc_analysis()
 
     for c in components:
         if c.black_area()[0] < noise_area_thresh:
             c.fill_white()
     med_comp_width = int(np.median([c.ncols for c in components
         if c.black_area()[0] > noise_area_thresh]))
+    med_comp_height = int(np.median([c.nrows for c in components
+        if c.black_area()[0] > noise_area_thresh]))
 
-    filt = imc.image_copy()
     filt.reset_onebit_image()
 
-    filt.filter_narrow_runs(med_comp_width, 'white')
-    filt.filter_narrow_runs(med_comp_width, 'black')
+    filt.filter_narrow_runs(med_comp_width * 2, 'white')
+    filt.filter_narrow_runs(med_comp_width * 2, 'black')
+    # filt.filter_narrow_runs(med_comp_width * 2, 'white')
+    # filt.filter_narrow_runs(med_comp_width * 2, 'black')
+
+    # gamera crashes when calculating a convex hull on very skinny ccs, so as a workaround
+    # just get rid of them altogether at the outset
+    # filt.filter_short_runs(med_comp_height // 8, 'black')
+    # filt.filter_short_runs(med_comp_height // 8, 'white')
 
     smear = filt.cc_analysis()
 
@@ -415,6 +350,7 @@ def smear_lines(image, points_factor=0.005):
     smear = [s for s in smear if s.nrows >= med_smear_height / 2]
     overlap_thresh = int(med_smear_height / 2)
 
+    g = graph.Graph(graph.FLAG_DAG)
     for a, b in iter.product(smear, smear):
         # ensure that a is to the left of b on the page
         if a.lr_x > b.ul_x:
@@ -427,23 +363,62 @@ def smear_lines(image, points_factor=0.005):
         # print(overlap_amt)
         if overlap_amt < overlap_thresh:
             continue
-        left_mid = gc.Point((a.lr_x + a.ul_x) // 2, (a.lr_y + a.ur_y) // 2)
-        right_mid = gc.Point((b.lr_x + b.ul_x) // 2, (b.ll_y + b.ul_y) // 2)
+        left_mid = np.array([a.lr_x + a.ul_x, a.lr_y + a.ur_y]) / 2
+        right_mid = np.array([b.lr_x + b.ul_x, b.ll_y + b.ul_y]) / 2
+        val = np.linalg.norm(left_mid - right_mid)
+        g.add_edge(a, b, val, True)
         # filt.draw_line(left_mid, right_mid, 1, 10)
 
+    # want to get to a point where every node has either 1 or 0 edges set to True
+    for n in g.get_nodes():
+
+        in_edges = [x for x in g.get_edges() if x.to_node == n]
+        trues = [x.label for x in in_edges]
+        if sum(trues) > 1:
+            for x in in_edges:
+                x.label = False
+            choose = min(in_edges, key=lambda x: x.cost)
+            choose.label = True
+
+        out_edges = [x for x in n.edges]
+        trues = [x.label for x in out_edges]
+        if sum(trues) > 1:
+            for x in out_edges:
+                x.label = False
+            choose = min(out_edges, key=lambda x: x.cost)
+            choose.label = True
+
+    for e in g.get_edges():
+        if not e.label:
+            continue
+        a = e.from_node.data
+        b = e.to_node.data
+        left_mid = np.array([a.lr_x + a.ul_x, a.lr_y + a.ur_y]) / 2
+        right_mid = np.array([b.lr_x + b.ul_x, b.ll_y + b.ul_y]) / 2
+        filt.draw_line(left_mid, right_mid, 1, 10)
+
     filt.reset_onebit_image()
+    hulls = filt.image_copy()
+    hulls.fill_white()
     smear = filt.cc_analysis()
+    # for s in smear:
+    #     points = s.convex_hull_as_points()
+    #     for i in range(len(points)):
+    #         hulls.draw_line(points[i-1] + s.ul, points[i] + s.ul, 1, 1)
 
     filt_color = filt.graph_color_ccs(smear, colors, 1)
 
-    imp = imc.to_rgb().to_numpy().astype('float')
+    imp = image.to_rgb().to_numpy().astype('float')
     flp = filt_color.to_rgb().to_numpy().astype('float')
     add = (imp + flp) / 2
     comb = Image.fromarray(add.astype('uint8'))
+    # comb.show()
     return comb
 
 
 def strip_projections(image, num_strips=30):
+
+    newimg = image.image_copy()
 
     bottom_contour = image.contour_bottom()
     left_side = min([i for i in range(len(bottom_contour) - 1)
@@ -460,22 +435,27 @@ def strip_projections(image, num_strips=30):
         subimg = image.subimage(ul, strip_dim)
         vert_strips.append(subimg)
 
+    strip_centers = [int((x + 0.5) * strip_dim.ncols + left_side) for x in range(num_strips)]
     strip_projections = [x.projection_rows() for x in vert_strips]
+    strip_proj_smooth = [moving_avg_filter(x) for x in strip_projections]
+    strip_log = [np.log(x / (max(x) + 1) + 1) for x in strip_proj_smooth]
+    anchor_points = []
+    # find runs of consecutive zeroes and take points in middle of these runs: anchors
+    for s in strip_log:
+        iszero = np.concatenate(([0], np.less(s, 0.2).view(np.int8), [0]))
+        absdiff = np.abs(np.diff(iszero))
+        ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
+        anchors = [int((x[0] + x[1]) / 2) for x in ranges]
+        anchor_points.append(anchors)
+
+    for i, x in enumerate(strip_centers):
+        for y in anchor_points[i]:
+            newimg.draw_marker(gc.Point(x, y), 10, 3, 1)
+
+    newimg.to_rgb().to_pil().save('aaaaaaa.png')
 
 
-
-if __name__ == '__main__':
-    from PIL import Image, ImageDraw, ImageFont
-
-    fname = 'salzinnes_12'
-
-    raw_image = gc.load_image('./png/' + fname + '_text.png')
-    image, staff_image = preprocess_images(raw_image, None)
-    smear_res = smear_lines(image)
-    smear_res.save('test_smear_{}.png'.format(fname))
-    exit()
-    cc_lines, lines_peak_locs, proj = identify_text_lines(image)
-
+def save_preproc_image(image, cc_lines, lines_peak_locs, fname):
     # color discovered CCS with unique colors
     ccs = [j for i in cc_lines for j in i]
     image = image.graph_color_ccs(ccs, None, 1)
@@ -497,8 +477,25 @@ if __name__ == '__main__':
         lr = (unioned.lr.x, unioned.lr.y)
         draw.rectangle([ul, lr], outline='black')
 
-    im.show()
+    # im.show()
     im.save('test_preproc_{}.png'.format(fname))
+
+
+if __name__ == '__main__':
+    from PIL import Image, ImageDraw, ImageFont
+
+    fnames = ['einsiedeln_003v', 'einsiedeln_003r', 'einsiedeln_002r', 'einsiedeln_002v', 'einsiedeln_001v', 'einsiedeln_001r']
+
+    for fname in fnames:
+        print('processing {}...'.format(fname))
+        raw_image = gc.load_image('./png/' + fname + '_text.png')
+        image, angle = preprocess_images(raw_image)
+        # smear_res = smear_lines(image)
+        # smear_res.save('test_smear_{}.png'.format(fname))
+        # exit()
+        cc_lines, lines_peak_locs, proj = identify_text_lines(image)
+
+        save_preproc_image(image, cc_lines, lines_peak_locs, fname)
 
     plt.clf()
     plt.plot(proj)
