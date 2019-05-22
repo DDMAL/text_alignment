@@ -85,7 +85,8 @@ def read_file(fname):
 def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     pivot = gc.Point(orig_dim.ncols / 2, orig_dim.nrows / 2)
 
-    # amount to translate to compensate for padding added by gamera's rotation in preprocessing
+    # amount to translate to compensate for padding added by gamera's rotation in preprocessing.
+    # i am pretty sure this is the most "correct" amount. my math might be off.
     dx = (orig_dim.ncols - target_dim.ncols) / 2
     dy = (orig_dim.nrows - target_dim.nrows) / 2
 
@@ -321,8 +322,8 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
     for s in syl_boxes:
         data['syl_boxes'].append({
             'syl': s.char,
-            'ul': str(s.ul),
-            'lr': str(s.lr)
+            'ul': [int(s.ul[0]), int(s.ul[1])],
+            'lr': [int(s.lr[0]), int(s.lr[1])]
         })
 
     return data
@@ -330,7 +331,7 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
 
 def draw_results_on_page(image, syl_boxes, lines_peak_locs):
     im = image.to_greyscale().to_pil()
-    text_size = 50
+    text_size = 70
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
@@ -340,13 +341,13 @@ def draw_results_on_page(image, syl_boxes, lines_peak_locs):
 
         ul = cbox.ul
         lr = cbox.lr
-        draw.text((ul[0], ul[1] - text_size), cbox.char, font=fnt, fill='gray')
+        draw.text((ul[0], ul[1] - text_size), cbox.char, font=fnt, fill='black')
         draw.rectangle([ul, lr], outline='black')
         draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
 
-    for i, peak_loc in enumerate(lines_peak_locs):
-        draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
-        draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
+    # for i, peak_loc in enumerate(lines_peak_locs):
+    #     draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
+    #     draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
     im.save('testimg_{}.png'.format(fname))
     # im.show()
@@ -358,8 +359,8 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    f_inds = [3]
-    fnames = ['einsiedeln_00{}v'.format(f_ind) for f_ind in f_inds]
+    f_inds = range(30, 32)
+    fnames = ['salzinnes_{}'.format(f_ind) for f_ind in f_inds]
 
     for fname in fnames:
         text_layer_fname = './png/{}_text.png'.format(fname)
