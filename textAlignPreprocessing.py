@@ -179,7 +179,7 @@ def preprocess_images(input_image,
     image_bin = input_image.to_onebit().subtract_images(image_bin)
 
     # find likely rotation angle and correct
-    angle, tmp = image_bin.rotation_angle_projections()
+    angle, tmp = image_bin.rotation_angle_projections(-6, 6)
     print(angle)
     image_bin = image_bin.rotate(angle=angle)
 

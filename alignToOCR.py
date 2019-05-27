@@ -120,7 +120,7 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     return CharBox(cbox.char, new_ul, new_lr)
 
 
-def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=True):
+def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=True, return_ocr=False):
     '''
     given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
     and OCR on the text layer and then aligns the results to the transcript text.
@@ -176,7 +176,11 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
             '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
 
     print('running ocropus with: {}'.format(ocropus_command))
-    subprocess.check_call(ocropus_command, shell=True)
+    try:
+        subprocess.check_call(ocropus_command, shell=True)
+    except subprocess.CalledProcessError:
+        print('OCRopus failed! Skipping current file.')
+        return None
 
     # read character position results from llocs file
     all_chars = []
@@ -220,6 +224,9 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     # get full ocr transcript
     ocr = ''.join(x.char for x in all_chars)
     all_chars_copy = list(all_chars)
+
+    if return_ocr:
+        return ocr
 
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
@@ -359,25 +366,30 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    f_inds = range(30, 32)
-    fnames = ['salzinnes_{}'.format(f_ind) for f_ind in f_inds]
+    f_inds = range(365, 550)
+    fnames = ['salzinnes_{:0>3}'.format(f_ind) for f_ind in f_inds]
+    # fnames = ['einsiedeln_{:0>3}v'.format(f_ind) for f_ind in f_inds]
 
     for fname in fnames:
         text_layer_fname = './png/{}_text.png'.format(fname)
         transcript_fname = './png/{}_transcript.txt'.format(fname)
 
-        if not os.path.isfile(text_layer_fname) or not os.path.isfile(transcript_fname):
+        if not os.path.isfile(text_layer_fname):
             print('cannot find files for {}.'.format(fname))
             continue
 
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
-        transcript = read_file('./png/' + fname + '_transcript.txt')
-        syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
 
-        # rot_img = raw_image.image_copy()
-        # rot_img = rot_img.rotate(angle=angle, bgcolor=0)
+        # transcript = read_file('./png/' + fname + '_transcript.txt')
+        # syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
+        # with open('{}.json'.format(fname), 'w') as outjson:
+        #     json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
+        # draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)
 
-        with open('{}.json'.format(fname), 'w') as outjson:
-            json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
-        draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)
+        ocr = process(raw_image, '', wkdir_name='test', return_ocr=True)
+        if ocr is None:
+            continue
+        ocr_fname = './salzinnes_ocr/{}_ocr.txt'.format(fname)
+        with open(ocr_fname, "w") as f:
+            f.write(ocr)

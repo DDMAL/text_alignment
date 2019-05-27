@@ -12,7 +12,8 @@ png/
 .DS_Store
 alignenv/
 *.ttf
-ocropy-master/
+ocropy-master/*
+salzinnes_ocr/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
