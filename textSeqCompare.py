@@ -4,22 +4,22 @@ import matplotlib.pyplot as plt
 
 # scoring system
 match = 4
-mismatch = -4
-gap_open = -4
-gap_extend = -4
+mismatch = -5
+gap_open = -5
+gap_extend = -1
 
-gap_open_x = -4
-gap_extend_x = -0
-gap_open_y = -8
-gap_extend_y = -4
+gap_open_x = -5
+gap_extend_x = -1
+gap_open_y = -5
+gap_extend_y = -1
 
 # display length
 line_len = 90
 
 def perform_alignment(transcript, ocr, verbose=False):
 
-    # transcript = 'dafsad'
-    # ocr = 'dfasd'
+    transcript = transcript + ' '
+    ocr = ocr + ' '
 
     # y_mat and x_mat keep track of gaps in horizontal and vertical directions
     mat = np.zeros((len(transcript), len(ocr)))
@@ -160,6 +160,17 @@ def perform_alignment(transcript, ocr, verbose=False):
 
 if __name__ == '__main__':
 
-    seq1 = 'sssds a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-    seq2 = 'dsdsLorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.fffff'
-    a, b = perform_alignment(seq1, seq2, verbose=True)
+    # seq1 = 'sssds a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
+    # seq2 = 'dsdsLorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.fffff'
+
+    import parse_salzinnes_csv as psc
+    reload(psc)
+
+    num = '118'
+    with open('./salzinnes_ocr/salzinnes_{}_ocr.txt'.format(num)) as f:
+        ocr = f.read()
+
+    text_func = psc.filename_to_text_func()
+    transcript = text_func('CF-{}'.format(num))
+
+    a, b = perform_alignment(transcript, ocr, verbose=True)
