@@ -69,6 +69,7 @@ def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='
 
     return fname_to_text
 
+
 if __name__ == '__main__':
     text_func = filename_to_text_func()
     transcript = text_func('CF-042')

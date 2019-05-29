@@ -16,6 +16,7 @@ gap_extend_y = -1
 # display length
 line_len = 90
 
+
 def perform_alignment(transcript, ocr, verbose=False):
 
     transcript = transcript + ' '

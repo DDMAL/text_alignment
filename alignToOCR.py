@@ -135,21 +135,6 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     image, eroded, angle = preproc.preprocess_images(raw_image)
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(image, eroded)
 
-    # get bounding box around each line, with padding
-    # for line in cc_lines:
-    #     pad = 0
-    #     x_min = min(c.offset_x for c in line) - pad
-    #     x_max = max(c.offset_x + c.width for c in line) + pad
-    #     y_max = max(c.offset_y + c.height for c in line) + pad
-    #
-    #     # we want to cut off the tops of large capital letters, because that's how the model was
-    #     # trained. set the top to be related to the median rather than the minimum y-coordinate
-    #     y_min = min(c.offset_y for c in line)
-    #     y_med_height = np.median([c.height for c in line]) * median_line_mult
-    #     y_min = max(y_max - y_med_height, y_min)
-    #
-    #     cc_strips.append(image.subimage((x_min, y_min), (x_max, y_max)))
-
     # make directory to do stuff in
     dir = 'wkdir_' + wkdir_name
     if not os.path.exists(dir):
@@ -268,77 +253,15 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         if not align_boxes:
             continue
 
+        # if align_boxes has boxes that lie on multiple text lines then we're trying to align this
+        # single syllable over multiple lines. remove all boxes on the upper line.
+        if len(set([x.uly for x in align_boxes])) > 1:
+            lower_level = max(x.uly for x in align_boxes)
+            align_boxes = [b for b in align_boxes if b.uly == lower_level]
+
         new_ul = (min(x.ulx for x in align_boxes), min(x.uly for x in align_boxes))
         new_lr = (max(x.lrx for x in align_boxes), max(x.lry for x in align_boxes))
         syl_boxes.append(CharBox(syl, new_ul, new_lr))
-
-    #
-    # for i, ocr_box in enumerate(all_chars):
-    #     tra_char = tra_align[i]
-    #     # print(len(align_transcript_boxes), tra_char, ocr_box)
-    #
-    #     # case if two characters are aligned (match OR mismatch)
-    #     if not (tra_char == '_' or ocr_box.char == '_'):
-    #         add_chars = word_accumulator + tra_char
-    #         align_transcript_boxes.append(CharBox(add_chars, ocr_box.ul, ocr_box.lr))
-    #         word_accumulator = ''
-    #     # case if there is a gap in the ocr but NOT the transcript
-    #     elif (tra_char == ' '):
-    #         word_accumulator = ''
-    #     elif (tra_char != '_'):
-    #         word_accumulator += tra_char
-    #     # elif (tra_char != '_'):
-    #     #     # a tricky case: what if the first letter of the transcript is assigned to a gap?
-    #     #     # then just kinda... prepend it onto the next letter. this looks bad.
-    #     #     next_box = [x for x in all_chars[i:] if not x.char == '_'][0]
-    #     #     char_width = next_box.width
-    #     #     new_ul = (max(next_box.ulx - char_width, 0), next_box.uly)
-    #     #     new_lr = (max(next_box.lrx - char_width, 0), next_box.lry)
-    #     #     align_transcript_boxes.append(CharBox(tra_char, new_ul, new_lr))
-    #
-    # #############################
-    # # -- GROUP INTO SYLLABLES --
-    # #############################
-    #
-    # syl_boxes = []
-    #
-    # # get bounding boxes for each syllable
-    # syl_pos = -1                        # track of which syllable trying to get box of
-    # char_accumulator = ''               # check cur syl against this
-    # get_new_syl = True                  # flag that next loop should start a new syllable
-    # cur_ul = 0                          # upper-left point of last unassigned character
-    # cur_lr = 0                          # lower-right point of last character in loop
-    # for box in align_transcript_boxes:    # @c can have more than one char in c[0].
-    #
-    #     char_text = box.char.replace(' ', '')
-    #     if not char_text:
-    #         continue
-    #
-    #     if get_new_syl:
-    #         get_new_syl = False
-    #         syl_pos += 1
-    #         cur_syl = syls[syl_pos]
-    #         cur_ul = box.ul
-    #
-    #     # we'd rather not a syllable cross between lines. so, if it looks like that's about to happen
-    #     # just forget about the part on the upper line and restart on the lower one.
-    #     cur_lr = box.lr
-    #     new_y_coord = box.uly
-    #     if new_y_coord > cur_ul[1]:
-    #         cur_ul = box.ul
-    #
-    #     char_accumulator += char_text
-    #
-    #     if verbose:
-    #         print(cur_syl, char_accumulator, cur_ul, cur_lr)
-    #
-    #     # if the accumulator has got the current syllable in it, remove the current syllable
-    #     # from the accumulator and assign that syllable to the bounding box between cur_ul and cur_lr.
-    #     # note that a syllable can be 'split,' in which case char_accumulator will have chars left in it
-    #     if cur_syl in char_accumulator:
-    #         char_accumulator = char_accumulator[len(cur_syl):]
-    #         syl_boxes.append(CharBox(cur_syl, cur_ul, cur_lr))
-    #         get_new_syl = True
 
     # finally, rotate syl_boxes back by the angle that the page was rotated by
     for i in range(len(syl_boxes)):
@@ -388,7 +311,7 @@ def draw_results_on_page(image, syl_boxes, lines_peak_locs):
         draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
         draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
-    im.save('testimg_{}.png'.format(fname))
+    im.save('./out_imgs/testimg_{}.png'.format(fname))
     # im.show()
 
 
@@ -401,7 +324,7 @@ if __name__ == '__main__':
     import os
 
     text_func = psc.filename_to_text_func()
-    f_inds = range(365, 366)
+    f_inds = range(5, 30)
 
     # fnames = ['einsiedeln_{:0>3}v'.format(f_ind) for f_ind in f_inds]
 
@@ -409,11 +332,12 @@ if __name__ == '__main__':
         fname = 'salzinnes_{:0>3}'.format(ind)
 
         text_layer_fname = './png/{}_text.png'.format(fname)
-        transcript = text_func('CF-{:0>3}'.format(ind))
 
         if not os.path.isfile(text_layer_fname):
             print('cannot find files for {}.'.format(fname))
             continue
+
+        transcript = text_func('CF-{:0>3}'.format(ind))
 
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
