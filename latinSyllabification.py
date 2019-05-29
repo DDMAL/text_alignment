@@ -8,8 +8,8 @@ vowels = ['a', 'e', 'i', 'o', 'u']
 def syllabify_word(word):
     res = word
 
-    if res == 'euouae':
-        return 'e-u-o-u-ae'
+    if res == 'Euouae':
+        return 'E-u-o-u-ae'
 
     # put square brackets around all dipthongs and vowels (using lookbehind/lookahead regex to make sure that vowels are not found within dipthongs)
     for dt in dipthongs:

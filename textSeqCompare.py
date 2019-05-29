@@ -3,14 +3,14 @@ from unidecode import unidecode
 import matplotlib.pyplot as plt
 
 # scoring system
-match = 4
+match = 10
 mismatch = -5
-gap_open = -5
+gap_open = -10
 gap_extend = -1
 
-gap_open_x = -5
+gap_open_x = -10
 gap_extend_x = -1
-gap_open_y = -5
+gap_open_y = -10
 gap_extend_y = -1
 
 # display length
@@ -141,10 +141,10 @@ def perform_alignment(transcript, ocr, verbose=False):
         xpt -= 1
 
     # reverse all records, since we obtained them by traversing the matrices from the bottom-right
-    tra_align = tra_align[::-1]
-    ocr_align = ocr_align[::-1]
-    align_record = align_record[::-1]
-    pt_record = pt_record[::-1]
+    tra_align = tra_align[-1:0:-1]
+    ocr_align = ocr_align[-1:0:-1]
+    align_record = align_record[-1:0:-1]
+    pt_record = pt_record[-1:0:-1]
 
     if verbose:
         for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     import parse_salzinnes_csv as psc
     reload(psc)
 
-    num = '118'
+    num = '042'
     with open('./salzinnes_ocr/salzinnes_{}_ocr.txt'.format(num)) as f:
         ocr = f.read()
 

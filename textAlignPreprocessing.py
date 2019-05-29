@@ -158,16 +158,18 @@ def moving_avg_filter(data, filter_size=filter_size):
     return smoothed
 
 
-def preprocess_images(input_image,
-                    sat_tresh=saturation_thresh, sat_area_thresh=sat_area_thresh,
-                    despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=3):
+def preprocess_images(input_image, despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=2):
     '''
-    use gamera to do some denoising, deskewing, etc on the text layer before attempting text line
+    use gamera to do some denoising, etc on the text layer before attempting text line
     segmentation
     '''
 
-    image_sats = input_image.saturation().to_greyscale().threshold(int(saturation_thresh * 256))
-    image_bin = input_image.to_onebit().subtract_images(image_sats)
+    image_bin = input_image.to_onebit()
+
+    image_bin.despeckle(despeckle_amt)
+    image_bin.invert()
+    image_bin.despeckle(despeckle_amt)
+    image_bin.invert()
 
     # keep only colored ccs above a certain size
     ccs = image_bin.cc_analysis()
@@ -176,27 +178,24 @@ def preprocess_images(input_image,
         if sat_area_thresh < area:
             c.fill_white()
 
-    image_bin = input_image.to_onebit().subtract_images(image_bin)
+    # image_bin = input_image.to_onebit().subtract_images(image_bin)
 
     # find likely rotation angle and correct
     angle, tmp = image_bin.rotation_angle_projections(-6, 6)
-    print(angle)
     image_bin = image_bin.rotate(angle=angle)
 
-    for i in range(filter_runs):
-        image_bin.filter_short_runs(filter_runs_amt, 'black')
-        image_bin.filter_narrow_runs(filter_runs_amt, 'black')
-
-    image_bin.despeckle(despeckle_amt)
-    image_bin.invert()
-    image_bin.despeckle(despeckle_amt)
-    image_bin.invert()
     image_bin.reset_onebit_image()
 
-    return image_bin, angle
+    image_eroded = image_bin.image_copy()
+
+    for i in range(filter_runs):
+        image_eroded.filter_short_runs(filter_runs_amt, 'black')
+        image_eroded.filter_narrow_runs(filter_runs_amt, 'black')
+
+    return image_bin, image_eroded, angle
 
 
-def identify_text_lines(image_bin):
+def identify_text_lines(image_bin, image_eroded):
     '''
     finds text lines on preprocessed image. step-by-step:
     1. find peak locations of vertical projection
@@ -209,7 +208,7 @@ def identify_text_lines(image_bin):
 
     # compute y-axis projection of input image and filter with sliding window average
     print('finding projection peaks...')
-    project = image_bin.projection_rows()
+    project = image_eroded.projection_rows()
     smoothed_projection = moving_avg_filter(project, filter_size)
 
     # calculate normalized log prominence of all peaks in projection
@@ -222,12 +221,12 @@ def identify_text_lines(image_bin):
         end = peak_locations[i + 1]
         idx = np.argmin(smoothed_projection[start:end])
         idx += start
-        image_bin.draw_line((0, idx), (image_bin.ncols, idx), 0, 1)
+        image_eroded.draw_line((0, idx), (image_eroded.ncols, idx), 0, 2)
 
     # perform connected component analysis and remove sufficiently small ccs and ccs that are too
     # tall; assume these to be ornamental letters
     print('connected component analysis...')
-    components = image_bin.cc_analysis()
+    components = image_eroded.cc_analysis()
 
     for c in components:
         if c.black_area()[0] < noise_area_thresh:
@@ -241,43 +240,49 @@ def identify_text_lines(image_bin):
 
     # using the peak locations found earlier, find all connected components that are intersected by
     # a horizontal strip at either edge of each line. these are the lines of text in the manuscript
-    print('intersecting connected components with text lines...')
+
+    line_strips = []
+
     cc_median_height = np.median([x.nrows for x in components])
     cc_lines = []
     for line_loc in peak_locations:
         res = [x for x in components if vertically_coincide(line_loc, x.offset_y, x.nrows, cc_median_height)]
 
-        # order ccs by x-coordinate of lower-right point
-        res = sorted(res, key=lambda cc: cc.lr.x)
-        cc_lines.append(res)
+        ulx = min(s.ul.x for s in res)
+        uly = min(s.ul.y for s in res)
+        lrx = max(s.lr.x for s in res)
+        lry = max(s.lr.y for s in res)
+
+        strip = image_bin.subimage((ulx, uly), (lrx, lry))
+        line_strips.append(strip)
 
     # if a single connected component appears in more than one cc_line, give priority to the line
     # that is closer to the center of the component's bounding box
-    for n in range(len(cc_lines) - 1):
-        intersect = set(cc_lines[n]) & set(cc_lines[n + 1])
-
-        # if most of the ccs are shared between these lines, just delete one of them
-        if len(intersect) > (0.5 * min(len(cc_lines[n]), len(cc_lines[n + 1]))):
-            cc_lines[n] = []
-            continue
-
-        for i in intersect:
-
-            box_center = i.offset_y + (i.nrows / 2)
-            distance_up = abs(peak_locations[n] - box_center)
-            distance_down = abs(peak_locations[n + 1] - box_center)
-
-            if distance_up > distance_down:
-                cc_lines[n].remove(i)
-                # print('removing up')
-            else:
-                cc_lines[n+1].remove(i)
-                # print('removing down')
+    # for n in range(len(cc_lines) - 1):
+    #     intersect = set(cc_lines[n]) & set(cc_lines[n + 1])
+    #
+    #     # if most of the ccs are shared between these lines, just delete one of them
+    #     if len(intersect) > (0.5 * min(len(cc_lines[n]), len(cc_lines[n + 1]))):
+    #         cc_lines[n] = []
+    #         continue
+    #
+    #     for i in intersect:
+    #
+    #         box_center = i.offset_y + (i.nrows / 2)
+    #         distance_up = abs(peak_locations[n] - box_center)
+    #         distance_down = abs(peak_locations[n + 1] - box_center)
+    #
+    #         if distance_up > distance_down:
+    #             cc_lines[n].remove(i)
+    #             # print('removing up')
+    #         else:
+    #             cc_lines[n+1].remove(i)
+    #             # print('removing down')
 
     # remove all empty lines from cc_lines in case they've been created by previous steps
-    cc_lines[:] = [x for x in cc_lines if bool(x)]
+    # cc_lines[:] = [x for x in cc_lines if bool(x)]
 
-    return cc_lines, peak_locations, smoothed_projection
+    return line_strips, peak_locations, smoothed_projection
 
 
 def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
@@ -455,11 +460,11 @@ def strip_projections(image, num_strips=30):
     newimg.to_rgb().to_pil().save('aaaaaaa.png')
 
 
-def save_preproc_image(image, cc_lines, lines_peak_locs, fname):
+def save_preproc_image(image, cc_strips, lines_peak_locs, fname):
     # color discovered CCS with unique colors
-    ccs = [j for i in cc_lines for j in i]
-    image = image.graph_color_ccs(ccs, None, 1)
-    im = image.to_pil()
+    # ccs = [j for i in cc_lines for j in i]
+    # image = image.color_ccs(True)
+    im = image.to_rgb().to_pil()
 
     text_size = 70
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
@@ -471,8 +476,8 @@ def save_preproc_image(image, cc_lines, lines_peak_locs, fname):
         draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
     # draw rectangles around identified text lines
-    for line in cc_lines:
-        unioned = union_images(line)
+    for line in cc_strips:
+        unioned = line
         ul = (unioned.ul.x, unioned.ul.y)
         lr = (unioned.lr.x, unioned.lr.y)
         draw.rectangle([ul, lr], outline='black')
@@ -484,21 +489,18 @@ def save_preproc_image(image, cc_lines, lines_peak_locs, fname):
 if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
 
-    fnames = ['einsiedeln_003v', 'einsiedeln_003r', 'einsiedeln_002r', 'einsiedeln_002v', 'einsiedeln_001v', 'einsiedeln_001r']
+    fnames = ['einsiedeln_003v']
 
     for fname in fnames:
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
-        image, angle = preprocess_images(raw_image)
-        # smear_res = smear_lines(image)
-        # smear_res.save('test_smear_{}.png'.format(fname))
-        # exit()
-        cc_lines, lines_peak_locs, proj = identify_text_lines(image)
+        image, eroded, angle = preprocess_images(raw_image)
+        line_strips, lines_peak_locs, proj = identify_text_lines(image, eroded)
 
-        save_preproc_image(image, cc_lines, lines_peak_locs, fname)
+        save_preproc_image(image, line_strips, lines_peak_locs, fname)
 
-    plt.clf()
-    plt.plot(proj)
-    for x in lines_peak_locs:
-        plt.axvline(x=x, linestyle=':')
-    plt.show()
+    # plt.clf()
+    # plt.plot(proj)
+    # for x in lines_peak_locs:
+    #     plt.axvline(x=x, linestyle=':')
+    # plt.show()

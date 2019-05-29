@@ -1,6 +1,12 @@
 import csv
 
 
+def clean(text):
+    text = text.replace(' | ', ' ')
+    text = text.lower()
+    return text
+
+
 def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='mapping.csv'):
     '''
     returns a function that, when given the filename of a salzinnes image, returns the lyrics
@@ -41,26 +47,29 @@ def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='
         folio_to_chants[name] = chants
 
     def fname_to_text(inp):
-        entry = [x for x in mapping if inp == x['filename']]
+        find_folio = [(i, x) for (i, x) in enumerate(mapping) if inp == x['filename']]
 
-        if not entry:
+        if not find_folio:
             raise ValueError('filename {} not found'.format(inp))
 
-        entry = entry[0]
+        if len(find_folio) > 1:
+            raise ValueError('duplicates found for {}'.format(inp))
+
+        idx, entry = find_folio[0]
 
         folio = entry['folio']
-        prev_entry = mapping[entry['seq'] - 1]
-        prev_folio = entry['folio']
+        prev_entry = mapping[idx - 1]
+        prev_folio = prev_entry['folio']
 
         text = folio_to_chants[prev_folio][-1]
         for chant in folio_to_chants[folio]:
             text = text + ' ' + chant
 
-        return text
+        return clean(text)
 
     return fname_to_text
 
 if __name__ == '__main__':
     text_func = filename_to_text_func()
-    transcript = text_func('CF-118')
+    transcript = text_func('CF-042')
     print(transcript)
