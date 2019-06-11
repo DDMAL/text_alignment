@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import gamera.core as gc
 gc.init_gamera()
 from gamera.plugins.image_utilities import union_images
@@ -11,6 +13,7 @@ import latinSyllabification as latsyl
 import subprocess
 import json
 import re
+import io
 
 reload(preproc)
 reload(tsc)
@@ -60,11 +63,11 @@ def clean_special_chars(inp):
     best to integrate them into the alignment algorithm. unidecode doesn't seem like these either
     '''
     inp = inp.replace('~', '')
-    inp = inp.replace('\xc4\x81', 'a')
-    inp = inp.replace('\xc4\x93', 'e')
-    # there is no i with bar above in unicode (???)
-    inp = inp.replace('\xc5\x8d', 'o')
-    inp = inp.replace('\xc5\xab', 'u')
+    # inp = inp.replace('\xc4\x81', 'a')
+    # inp = inp.replace('\xc4\x93', 'e')
+    # # there is no i with bar above in unicode (???)
+    # inp = inp.replace('\xc5\x8d', 'o')
+    # inp = inp.replace('\xc5\xab', 'u')
     return inp
 
 
@@ -171,7 +174,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     other_chars = []
     for i in range(len(cc_strips)):
         locs_file = './{}/{}_{}.llocs'.format(dir, wkdir_name, i)
-        with open(locs_file) as f:
+        with io.open(locs_file, encoding='utf-8') as f:
             locs = [line.rstrip('\n') for line in f]
 
         x_min = cc_strips[i].offset_x
@@ -190,10 +193,9 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
             lr = (cur_xpos, y_max)
 
             if lsp[0] == '~' or lsp[0] == '':
-                new_box = CharBox(lsp[0], ul, lr)
+                new_box = CharBox(unicode(lsp[0]), ul, lr)
                 other_chars.append(new_box)
             else:
-                # all_chars.append((clean_special_chars(lsp[0]), ul, lr))
                 new_box = CharBox(clean_special_chars(lsp[0]), ul, lr)
                 all_chars.append(new_box)
 
@@ -205,6 +207,25 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     else:
         subprocess.check_call('rm -r ' + dir, shell=True)
 
+    #############################
+    # -- HANDLE ABBREVIATIONS --
+    #############################
+
+    abbreviations = latsyl.abbreviations
+    for abb in abbreviations.keys():
+        while True:
+            ocr_str = ''.join(unicode(x.char) for x in all_chars)
+            idx = ocr_str.find(abb)
+
+            if idx == -1:
+                break
+            ins = []
+
+            for i, segment in enumerate(abbreviations[abb]):
+                split_box = all_chars[i + idx]
+                ins += [CharBox(x, split_box.ul, split_box.lr) for x in segment]
+            all_chars = all_chars[:idx] + ins + all_chars[idx + len(abb):]
+
     # get full ocr transcript
     ocr = ''.join(x.char for x in all_chars)
     all_chars_copy = list(all_chars)
@@ -215,7 +236,9 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
-    tra_align, ocr_align = tsc.perform_alignment(transcript, ocr, verbose=verbose)
+    tra_align, ocr_align = tsc.perform_alignment(list(transcript), list(ocr), verbose=False)
+    tra_align = ''.join(tra_align)
+    ocr_align = ''.join(ocr_align)
     syls = latsyl.syllabify_text(transcript)
 
     align_transcript_boxes = []
@@ -238,7 +261,9 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
 
     for syl in syls:
 
-        if len(syl) == 1:
+        if len(syl) < 1:
+            continue
+        elif len(syl) == 1:
             syl_regex = syl
         else:
             syl_regex = syl[0] + syl[1:-1].replace('', '_*') + syl[-1]
@@ -324,8 +349,8 @@ if __name__ == '__main__':
     import os
 
     text_func = psc.filename_to_text_func()
-    f_inds = range(5, 30)
-
+    f_inds = [20] + list(np.random.choice(range(1, 550), 35))
+    #f_inds = [20]
     # fnames = ['einsiedeln_{:0>3}v'.format(f_ind) for f_ind in f_inds]
 
     for ind in f_inds:
@@ -337,13 +362,20 @@ if __name__ == '__main__':
             print('cannot find files for {}.'.format(fname))
             continue
 
-        transcript = text_func('CF-{:0>3}'.format(ind))
+        try:
+            transcript = text_func('CF-{:0>3}'.format(ind))
+        except ValueError:
+            print('no chants listed for page {}'.format(fname))
+            continue
 
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
 
-        syl_boxes, image, lines_peak_locs = process(raw_image, transcript, wkdir_name='test')
-        with open('{}.json'.format(fname), 'w') as outjson:
+        result = process(raw_image, transcript, wkdir_name='test')
+        if result is None:
+            continue
+        syl_boxes, image, lines_peak_locs = result
+        with open('./out_json/{}.json'.format(fname), 'w') as outjson:
             json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
         draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)
 

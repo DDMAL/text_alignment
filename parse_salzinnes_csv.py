@@ -1,15 +1,21 @@
 import csv
+import re
 
 
 def clean(text):
-    text = text.replace(' | ', ' ')
+    # remove all character that are not letters or whitespace
+    text = re.sub(r"[^\s\w|]", "", text)
+    text = re.sub(r" \| ", " ", text)
+    # change all runs of consecutive spaces to single spaces
+    text = re.sub(r" +", " ", text)
+    # convert to lowercase
     text = text.lower()
     return text
 
 
 def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='mapping.csv'):
     '''
-    returns a function that, when given the filename of a salzinnes image, returns the lyrics
+    returns a function that, given the filename of a salzinnes image, returns the lyrics
     on that image. to be safe, this will include chants that may partially appear on the previous
     or next page.
     '''
@@ -61,9 +67,17 @@ def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='
         prev_entry = mapping[idx - 1]
         prev_folio = prev_entry['folio']
 
-        text = folio_to_chants[prev_folio][-1]
-        for chant in folio_to_chants[folio]:
-            text = text + ' ' + chant
+        # add last chant of previous page to output text, if the previous page has a chant
+        if prev_folio in folio_to_chants:
+            text = folio_to_chants[prev_folio][-1]
+        else:
+            text = ''
+
+        # it's possible that no chant starts on this page, but there is chant text on this page
+        # carried over from the previous page.
+        if folio in folio_to_chants:
+            for chant in folio_to_chants[folio]:
+                text = text + ' ' + chant
 
         return clean(text)
 

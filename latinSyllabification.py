@@ -1,8 +1,23 @@
+# -*- coding: utf-8 -*-
+
+
 import re
 
 consonant_groups = ['qu', 'fl', 'fr', 'st', 'br', 'cr', 'pr', 'tr', 'ct', 'th']
 dipthongs = ['au', 'io', 'ihe', 'oe', 'ua', 'ui', 'uo']
 vowels = ['a', 'e', 'i', 'o', 'u']
+
+abbreviations = {
+    u'dns': ['do', 'mi', 'nus'],
+    u'dūs': ['do', 'mi', 'nus'],
+    u'dne': ['do', 'mi', 'ne'],
+    u'alla': ['al', 'le', 'lu', 'ia'],
+    u'^': ['us'],
+    u'ā': ['am'],
+    u'ē': ['em'],
+    u'ū': ['um'],
+    u'ō': ['om']
+}
 
 
 def syllabify_word(word):

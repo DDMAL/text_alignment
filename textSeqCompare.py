@@ -17,10 +17,20 @@ gap_extend_y = -1
 line_len = 90
 
 
-def perform_alignment(transcript, ocr, verbose=False):
+def _default_score_method(a, b):
+    if a == b:
+        return 1
+    else:
+        return 0
 
-    transcript = transcript + ' '
-    ocr = ocr + ' '
+
+def perform_alignment(transcript, ocr, scoring_method=False, verbose=False):
+
+    transcript = transcript + [' ']
+    ocr = ocr + [' ']
+
+    if not scoring_method:
+        scoring_method = _default_score_method
 
     # y_mat and x_mat keep track of gaps in horizontal and vertical directions
     mat = np.zeros((len(transcript), len(ocr)))
@@ -32,18 +42,21 @@ def perform_alignment(transcript, ocr, verbose=False):
 
     for i in range(len(transcript)):
         mat[i][0] = gap_extend * i
-        x_mat[i][0] = -100000
+        x_mat[i][0] = -1e10
         y_mat[i][0] = gap_extend * i
     for j in range(len(ocr)):
         mat[0][j] = gap_extend * j
         x_mat[0][j] = gap_extend * j
-        y_mat[0][j] = -100000
+        y_mat[0][j] = -1e10
 
     for i in range(1, len(transcript)):
         for j in range(1, len(ocr)):
 
             # update main matrix (for matches)
-            match_score = match if transcript[i-1] == ocr[j-1] else mismatch
+            # match_score = match if transcript[i-1] == ocr[j-1] else mismatch
+            eq_res = scoring_method(transcript[i-1], ocr[j-1])
+            match_score = match if eq_res else mismatch
+
             mat_vals = [mat[i-1][j-1], x_mat[i-1][j-1], y_mat[i-1][j-1]]
             mat[i][j] = max(mat_vals) + match_score
             mat_ptr[i][j] = int(mat_vals.index(max(mat_vals)))
@@ -70,10 +83,10 @@ def perform_alignment(transcript, ocr, verbose=False):
     # mat of 0 = match, 1 = x gap, 2 = y gap
     #
     # first
-    tra_align = ''
-    ocr_align = ''
-    align_record = ''
-    pt_record = ''
+    tra_align = []
+    ocr_align = []
+    align_record = []
+    pt_record = []
     xpt = len(transcript) - 1
     ypt = len(ocr) - 1
     mpt = mat_ptr[xpt][ypt]
@@ -82,7 +95,7 @@ def perform_alignment(transcript, ocr, verbose=False):
     # start it off. we are forcibly aligning the final characters. this is not ideal.
     tra_align += transcript[xpt]
     ocr_align += ocr[ypt]
-    align_record += 'O' if(transcript[xpt] == ocr[ypt]) else '~'
+    align_record += ['O'] if(transcript[xpt] == ocr[ypt]) else ['~']
 
     # start at bottom-right corner and work way up to top-left
     while(xpt > 0 and ypt > 0):
@@ -91,12 +104,12 @@ def perform_alignment(transcript, ocr, verbose=False):
 
         # case if the current cell is reachable from the diagonal
         if mpt == 0:
-            tra_align += transcript[xpt - 1]
-            ocr_align += ocr[ypt - 1]
+            tra_align.append(transcript[xpt - 1])
+            ocr_align.append(ocr[ypt - 1])
             added_text = transcript[xpt - 1] + ' ' + ocr[ypt - 1]
 
             # determine if this diagonal step was a match or a mismatch
-            align_record += 'O' if(transcript[xpt - 1] == ocr[ypt - 1]) else '~'
+            align_record.append('O' if(transcript[xpt - 1] == ocr[ypt - 1]) else '~')
 
             mpt = mat_ptr[xpt][ypt]
             xpt -= 1
@@ -104,21 +117,21 @@ def perform_alignment(transcript, ocr, verbose=False):
 
         # case if current cell is reachable horizontally
         elif mpt == 1:
-            tra_align += transcript[xpt - 1]
-            ocr_align += '_'
+            tra_align.append(transcript[xpt - 1])
+            ocr_align.append('_')
             added_text = transcript[xpt - 1] + ' _'
 
-            align_record += ' '
+            align_record.append(' ')
             mpt = x_mat_ptr[xpt][ypt]
             xpt -= 1
 
         # case if current cell is reachable vertically
         elif mpt == 2:
-            tra_align += '_'
-            ocr_align += ocr[ypt - 1]
+            tra_align.append('_')
+            ocr_align.append(ocr[ypt - 1])
             added_text = '_ ' + ocr[ypt - 1]
 
-            align_record += ' '
+            align_record.append(' ')
             mpt = y_mat_ptr[xpt][ypt]
             ypt -= 1
 
@@ -130,15 +143,15 @@ def perform_alignment(transcript, ocr, verbose=False):
 
     # print(xpt, ypt)
     while ypt > 0:
-        tra_align += '_'
-        ocr_align += ocr[ypt - 1]
-        align_record += ' '
+        tra_align.append('_')
+        ocr_align.append(ocr[ypt - 1])
+        align_record.append(' ')
         ypt -= 1
 
     while xpt > 0:
-        ocr_align += '_'
-        tra_align += transcript[xpt - 1]
-        align_record += ' '
+        ocr_align.append('_')
+        tra_align.append(transcript[xpt - 1])
+        align_record.append(' ')
         xpt -= 1
 
     # reverse all records, since we obtained them by traversing the matrices from the bottom-right
@@ -148,30 +161,31 @@ def perform_alignment(transcript, ocr, verbose=False):
     pt_record = pt_record[-1:0:-1]
 
     if verbose:
-        for n in range(int(np.ceil(float(len(tra_align)) / line_len))):
-            start = n * line_len
-            end = (n + 1) * line_len
-            print(tra_align[start:end])
-            print(ocr_align[start:end])
-            print(align_record[start:end])
-            print('')
+        for n in range(len(tra_align)):
+            line = '{} {} {}'
+            print(line.format(tra_align[n], ocr_align[n], align_record[n]))
 
     return(tra_align, ocr_align)
 
 
 if __name__ == '__main__':
 
-    # seq1 = 'sssds a aa a  aaa L orem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-    # seq2 = 'dsdsLorem ipsum dollllllor acsit amet, consectur di.s elit,, eiusmmd tempodsr  incididunt ut lb ore etmagna aliqua.fffff'
+    seq1 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit '
+    seq2 = 'LoLorem fipsudolor ..... sit eamet, c.nnr adizisdcing eelitellit'
 
-    import parse_salzinnes_csv as psc
-    reload(psc)
+    seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
+    seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
 
-    num = '042'
-    with open('./salzinnes_ocr/salzinnes_{}_ocr.txt'.format(num)) as f:
-        ocr = f.read()
+    a, b = perform_alignment(seq1, seq2, verbose=True)
 
-    text_func = psc.filename_to_text_func()
-    transcript = text_func('CF-{}'.format(num))
-
-    a, b = perform_alignment(transcript, ocr, verbose=True)
+    # import parse_salzinnes_csv as psc
+    # reload(psc)
+    #
+    # num = '042'
+    # with open('./salzinnes_ocr/salzinnes_{}_ocr.txt'.format(num)) as f:
+    #     ocr = f.read()
+    #
+    # text_func = psc.filename_to_text_func()
+    # transcript = text_func('CF-{}'.format(num))
+    #
+    # a, b = perform_alignment(transcript, ocr, verbose=True)
