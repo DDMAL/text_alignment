@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import re
 
-consonant_groups = ['qu', 'ch', 'ph', 'fl', 'fr', 'st', 'br', 'cr', 'pr', 'tr', 'ct', 'th']
-diphthongs = ['ae', 'au', 'io', 'ihe', 'oe', 'ua', 'iu']
+consonant_groups = ['qu', 'ch', 'ph', 'fl', 'fr', 'st', 'br', 'cr', 'cl', 'pr', 'tr', 'ct', 'th']
+diphthongs = ['ae', 'au', 'io', 'ie', 'ihe', 'oe', 'ua', 'iu']
 vowels = ['a', 'e', 'i', 'o', 'u']
 
 abbreviations = {
@@ -63,39 +63,41 @@ def syllabify_word(inp):
             word[i] = word[i] + '*'
 
     # begin merging units together.
-    # first stick consonants / consonant groups to syllables ahead of them
-    new_word = []
-    i = 0
-    while i < len(word):
-        if i + 1 >= len(word):
-            new_word.append(word[i])
-            break
-        cur = word[i]
-        proc = word[i + 1]
-        if '*' in proc and '*' not in cur:
-            new_word.append(cur + proc)
-            i += 2
-        else:
-            new_word.append(cur)
-            i += 1
+    while not all(('*' in x) for x in word):
 
-    word = list(new_word)
+        # first stick consonants / consonant groups to syllables ahead of them
+        new_word = []
+        i = 0
+        while i < len(word):
+            if i + 1 >= len(word):
+                new_word.append(word[i])
+                break
+            cur = word[i]
+            proc = word[i + 1]
+            if '*' in proc and '*' not in cur:
+                new_word.append(cur + proc)
+                i += 2
+            else:
+                new_word.append(cur)
+                i += 1
+        word = list(new_word)
 
-    # then stick consonants / consonant groups to syllables behind them
-    new_word = []
-    i = 0
-    while i < len(word):
-        if i + 1 >= len(word):
-            new_word.append(word[i])
-            break
-        cur = word[i]
-        proc = word[i + 1]
-        if '*' in cur and '*' not in proc:
-            new_word.append(cur + proc)
-            i += 2
-        else:
-            new_word.append(cur)
-            i += 1
+        # then stick consonants / consonant groups to syllables behind them
+        new_word = []
+        i = 0
+        while i < len(word):
+            if i + 1 >= len(word):
+                new_word.append(word[i])
+                break
+            cur = word[i]
+            proc = word[i + 1]
+            if '*' in cur and '*' not in proc:
+                new_word.append(cur + proc)
+                i += 2
+            else:
+                new_word.append(cur)
+                i += 1
+        word = list(new_word)
 
     word = [x.replace('*', '') for x in new_word]
 
@@ -207,6 +209,6 @@ def parse_transcript(filename, syllabify=True):
 
 if __name__ == "__main__":
     # print(parse_transcript('./salzinnes_ocr/salzinnes_018_ocr.txt'))
-    inp = 'quaecumque eius michi antiphonum dominus'
+    inp = 'quaecumque eius michi antiphonum assistens cernerent'
     res = syllabify_text(inp)
     print(res)
