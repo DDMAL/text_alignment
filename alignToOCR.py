@@ -292,7 +292,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     for i in range(len(syl_boxes)):
         syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, image.dim, raw_image.dim)
 
-    return syl_boxes, image, lines_peak_locs
+    return syl_boxes, image, lines_peak_locs, all_chars_copy
 
 
 def to_JSON_dict(syl_boxes, lines_peak_locs):
@@ -345,12 +345,13 @@ if __name__ == '__main__':
     import parse_salzinnes_csv as psc
     reload(psc)
     import PIL
+    import pickle
     from PIL import Image, ImageDraw, ImageFont
     import os
 
     text_func = psc.filename_to_text_func()
-    f_inds = [20] + list(np.random.choice(range(1, 550), 35))
-    #f_inds = [20]
+    # f_inds = list(np.random.choice(range(1, 550), 40))
+    f_inds = range(1,550)
     # fnames = ['einsiedeln_{:0>3}v'.format(f_ind) for f_ind in f_inds]
 
     for ind in f_inds:
@@ -374,9 +375,12 @@ if __name__ == '__main__':
         result = process(raw_image, transcript, wkdir_name='test')
         if result is None:
             continue
-        syl_boxes, image, lines_peak_locs = result
+        syl_boxes, image, lines_peak_locs, all_chars = result
         with open('./out_json/{}.json'.format(fname), 'w') as outjson:
             json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
+        with open('./salzinnes_ocr/{}_boxes.pickle'.format(fname), 'wb') as f:
+            pickle.dump(all_chars, f, -1)
+
         draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)
 
         # ocr = process(raw_image, '', wkdir_name='test', return_ocr=True)

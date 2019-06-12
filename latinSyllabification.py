@@ -210,6 +210,6 @@ def parse_transcript(filename, syllabify=True):
 
 if __name__ == "__main__":
     # print(parse_transcript('./salzinnes_ocr/salzinnes_018_ocr.txt'))
-    inp = 'quaecumque eius michi antiphonum assistens alleluya'
+    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus'
     res = syllabify_text(inp)
     print(res)
