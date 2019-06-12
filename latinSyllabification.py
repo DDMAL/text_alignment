@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import re
+import textSeqCompare as tsc
 
 consonant_groups = ['qu', 'ch', 'ph', 'fl', 'fr', 'st', 'br', 'cr', 'cl', 'pr', 'tr', 'ct', 'th']
-diphthongs = ['ae', 'au', 'io', 'ie', 'ihe', 'oe', 'ua', 'iu']
-vowels = ['a', 'e', 'i', 'o', 'u']
+diphthongs = ['ae', 'au', 'ei', 'oe', 'ui', 'ya', 'ex', 'ix']
+vowels = ['a', 'e', 'i', 'o', 'u', 'y']
 
 abbreviations = {
     u'dns': ['do', 'mi', 'nus'],
@@ -209,6 +210,6 @@ def parse_transcript(filename, syllabify=True):
 
 if __name__ == "__main__":
     # print(parse_transcript('./salzinnes_ocr/salzinnes_018_ocr.txt'))
-    inp = 'quaecumque eius michi antiphonum assistens cernerent'
+    inp = 'quaecumque eius michi antiphonum assistens alleluya'
     res = syllabify_text(inp)
     print(res)

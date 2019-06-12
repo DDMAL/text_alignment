@@ -13,6 +13,23 @@ def clean(text):
     return text
 
 
+def combine_transcripts(standard, ms):
+    # this is really terrible. please forgive me.
+    # the issue is: to syllabify correctly we need to know which 'i's in the transcripts represent
+    # 'j's and which are actually 'i's. this is corrected in the standardized spelling but not the
+    # MS spelling, which we'd rather use.
+
+    ms = ms.replace('ihe', 'ie')
+    j_search = r'\w*[jJ]\w*'
+    res = re.finditer(j_search, standard)
+    for match in res:
+        word = match.group().lower()
+        new_pat = word.replace('j', r'\w')
+        ms = re.sub(new_pat, word, ms)
+
+    return ms
+
+
 def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='mapping.csv'):
     '''
     returns a function that, given the filename of a salzinnes image, returns the lyrics
@@ -42,14 +59,20 @@ def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='
     arr = [x for x in arr if not x[10] == '*']
 
     folio_to_chants = {}
-    folio_names = set([x[2] for x in arr])              # x[2] = folio name containing chant
+
+    # x[2] = folio name containing chant
+    folio_names = set([x[2] for x in arr])
 
     for name in folio_names:
 
         chant_rows = [x for x in arr if x[2] == name]
-        chant_rows.sort(key=lambda x: int(x[3]))        # x[3] = sequence of chants on folio
 
-        chants = [x[14] for x in chant_rows]            # x[14] = text of chant
+        # x[3] = sequence of chants on folio
+        chant_rows.sort(key=lambda x: int(x[3]))
+
+        # x[13] = standardized spelling of chant
+        # x[14] = MS spelling of chant
+        chants = [combine_transcripts(x[13], x[14]) for x in chant_rows]
         folio_to_chants[name] = chants
 
     def fname_to_text(inp):
