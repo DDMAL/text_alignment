@@ -8,26 +8,26 @@ mismatch = -5
 gap_open = -10
 gap_extend = -1
 
-gap_open_x = -10
-gap_extend_x = -1
-gap_open_y = -10
-gap_extend_y = -1
-
-# display length
-line_len = 90
-
 
 def _default_score_method(a, b):
     if a == b:
-        return 1
+        return match
     else:
-        return 0
+        return mismatch
 
 
-def perform_alignment(transcript, ocr, scoring_method=False, verbose=False):
+def perform_alignment(transcript, ocr, scoring_method=False, gap_open=gap_open,
+                    gap_extend=gap_extend, verbose=False):
 
     transcript = transcript + [' ']
     ocr = ocr + [' ']
+
+    # these can be set individually to modify the affine gap penalties for gaps in the x or y direction
+    # but i've yet to find a situation where doing this actually improves alignment results
+    gap_open_x = gap_open
+    gap_extend_x = gap_extend
+    gap_open_y = gap_open
+    gap_extend_y = gap_extend
 
     if not scoring_method:
         scoring_method = _default_score_method
@@ -40,14 +40,15 @@ def perform_alignment(transcript, ocr, scoring_method=False, verbose=False):
     y_mat_ptr = np.zeros((len(transcript), len(ocr)))
     x_mat_ptr = np.zeros((len(transcript), len(ocr)))
 
+    # establish boundary conditions
     for i in range(len(transcript)):
         mat[i][0] = gap_extend * i
-        x_mat[i][0] = -1e10
+        x_mat[i][0] = -1e100
         y_mat[i][0] = gap_extend * i
     for j in range(len(ocr)):
         mat[0][j] = gap_extend * j
         x_mat[0][j] = gap_extend * j
-        y_mat[0][j] = -1e10
+        y_mat[0][j] = -1e100
 
     for i in range(1, len(transcript)):
         for j in range(1, len(ocr)):
@@ -55,7 +56,7 @@ def perform_alignment(transcript, ocr, scoring_method=False, verbose=False):
             # update main matrix (for matches)
             # match_score = match if transcript[i-1] == ocr[j-1] else mismatch
             eq_res = scoring_method(transcript[i-1], ocr[j-1])
-            match_score = match if eq_res else mismatch
+            match_score = eq_res
 
             mat_vals = [mat[i-1][j-1], x_mat[i-1][j-1], y_mat[i-1][j-1]]
             mat[i][j] = max(mat_vals) + match_score
@@ -90,7 +91,6 @@ def perform_alignment(transcript, ocr, scoring_method=False, verbose=False):
     xpt = len(transcript) - 1
     ypt = len(ocr) - 1
     mpt = mat_ptr[xpt][ypt]
-    prev_pt = -1
 
     # start it off. we are forcibly aligning the final characters. this is not ideal.
     tra_align += transcript[xpt]
@@ -176,16 +176,18 @@ if __name__ == '__main__':
     seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
     seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
 
-    a, b = perform_alignment(seq1, seq2, verbose=True)
+    a, b = perform_alignment(seq1, seq2, verbose=False)
+    print('|'.join(a))
+    print('|'.join(b))
 
     # import parse_salzinnes_csv as psc
     # reload(psc)
     #
-    # num = '042'
+    # num = '082'
     # with open('./salzinnes_ocr/salzinnes_{}_ocr.txt'.format(num)) as f:
-    #     ocr = f.read()
+    #     ocr = list(f.read())
     #
     # text_func = psc.filename_to_text_func()
-    # transcript = text_func('CF-{}'.format(num))
+    # transcript = list(text_func('CF-{}'.format(num)))
     #
     # a, b = perform_alignment(transcript, ocr, verbose=True)
