@@ -158,7 +158,7 @@ def moving_avg_filter(data, filter_size=filter_size):
     return smoothed
 
 
-def preprocess_images(input_image, despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=2):
+def preprocess_images(input_image, despeckle_amt=despeckle_amt, filter_runs=1, filter_runs_amt=2, correct_rotation=True):
     '''
     use gamera to do some denoising, etc on the text layer before attempting text line
     segmentation
@@ -182,7 +182,8 @@ def preprocess_images(input_image, despeckle_amt=despeckle_amt, filter_runs=1, f
 
     # find likely rotation angle and correct
     angle, tmp = image_bin.rotation_angle_projections(-6, 6)
-    image_bin = image_bin.rotate(angle=angle)
+    if correct_rotation:
+        image_bin = image_bin.rotate(angle=angle)
 
     image_bin.reset_onebit_image()
 
