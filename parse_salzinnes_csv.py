@@ -20,6 +20,9 @@ def combine_transcripts(standard, ms):
     # MS spelling, which we'd rather use.
 
     ms = ms.replace('ihe', 'ie')
+    if not standard:
+        return ms
+
     j_search = r'\w*[jJ]\w*'
     res = re.finditer(j_search, standard)
     for match in res:
@@ -30,41 +33,50 @@ def combine_transcripts(standard, ms):
     return ms
 
 
-def filename_to_text_func(transcript_path='123723_Salzinnes.csv', mapping_path='mapping.csv'):
+def filename_to_text_func(transcript_path=, mapping_path=None):
     '''
     returns a function that, given the filename of a salzinnes image, returns the lyrics
     on that image. to be safe, this will include chants that may partially appear on the previous
     or next page.
     '''
 
-    mapping = []
-    with open(mapping_path) as file:
-        reader = csv.reader(file, delimiter=',')
-        header = reader.next()
-        for row in reader:
-            line = {}
-            line['seq'] = int(row[0])
-            line['folio'] = row[1]
-            line['filename'] = row[2]
-            mapping.append(line)
-
     arr = []
     with open(transcript_path) as file:
         reader = csv.reader(file, delimiter=',')
-        header = reader.next()
         for row in reader:
             arr.append(row)
+    header = arr[0]
+    arr = arr[1:]
 
     # throw away chants with no associated melody on the page (Mode == *)
-    arr = [x for x in arr if not x[10] == '*']
+    arr = [x for x in arr if not x[10] == '*' and not x[2] == 'folio']
 
     folio_to_chants = {}
 
     # x[2] = folio name containing chant
-    folio_names = set([x[2] for x in arr])
+    folio_names = list(set([x[2] for x in arr]))
+    folio_names.sort()
+
+    mapping = []
+    if not mapping_path:
+        for i, name in enumerate(folio_names):
+            line = {}
+            line['seq'] = i
+            line['folio'] = name
+            line['filename'] = name
+            mapping.append(line)
+    else:
+        with open(mapping_path) as file:
+            reader = csv.reader(file, delimiter=',')
+            header = reader.next()
+            for row in reader:
+                line = {}
+                line['seq'] = int(row[0])
+                line['folio'] = row[1]
+                line['filename'] = row[2]
+                mapping.append(line)
 
     for name in folio_names:
-
         chant_rows = [x for x in arr if x[2] == name]
 
         # x[3] = sequence of chants on folio
