@@ -33,7 +33,7 @@ def combine_transcripts(standard, ms):
     return ms
 
 
-def filename_to_text_func(transcript_path=, mapping_path=None):
+def filename_to_text_func(transcript_path, mapping_path=None):
     '''
     returns a function that, given the filename of a salzinnes image, returns the lyrics
     on that image. to be safe, this will include chants that may partially appear on the previous

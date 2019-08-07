@@ -212,71 +212,6 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     # -- PERFORM OCR WITH OCROPUS --
     #################################
 
-    # # make directory to do stuff in
-    # dir = 'wkdir_' + wkdir_name
-    # if not os.path.exists(dir):
-    #     subprocess.check_call("mkdir " + dir, shell=True)
-    #
-    # # save strips to directory
-    # for i, strip in enumerate(cc_strips):
-    #     strip.save_image('./{}/{}_{}.png'.format(dir, wkdir_name, i))
-    #
-    # # call ocropus command to do OCR on each saved line strip.
-    # if on_windows:
-    #     cwd = os.getcwd()
-    #     ocropus_command = 'python ./ocropy-master/ocropus-rpred ' \
-    #         '--nocheck --llocs -m {} {}/{}/*'.format(ocropus_model, cwd, dir)
-    # else:
-    #     # the presence of extra quotes \' around the path to be globbed makes a difference.
-    #     # sometimes. it's unclear.
-    #     ocropus_command = 'ocropus-rpred -Q {} ' \
-    #         '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
-    #
-    # print('running ocropus with: {}'.format(ocropus_command))
-    # try:
-    #     subprocess.check_call(ocropus_command, shell=True)
-    # except subprocess.CalledProcessError:
-    #     print('OCRopus failed! Skipping current file.')
-    #     return None
-    #
-    # # read character position results from llocs file
-    # all_chars = []
-    # other_chars = []
-    # for i in range(len(cc_strips)):
-    #     locs_file = './{}/{}_{}.llocs'.format(dir, wkdir_name, i)
-    #     with io.open(locs_file, encoding='utf-8') as f:
-    #         locs = [line.rstrip('\n') for line in f]
-    #
-    #     x_min = cc_strips[i].offset_x
-    #     y_min = cc_strips[i].offset_y
-    #     y_max = cc_strips[i].offset_y + cc_strips[i].height
-    #
-    #     # note: ocropus seems to associate every character with its RIGHTMOST edge. we want the
-    #     # left-most edge, so we associate each character with the previous char's right edge
-    #     text_line = []
-    #     prev_xpos = x_min
-    #     for l in locs:
-    #         lsp = l.split('\t')
-    #         cur_xpos = int(np.round(float(lsp[1]) + x_min))
-    #
-    #         ul = (prev_xpos, y_min)
-    #         lr = (cur_xpos, y_max)
-    #
-    #         if lsp[0] == '~' or lsp[0] == '':
-    #             new_box = CharBox(unicode(lsp[0]), ul, lr)
-    #             other_chars.append(new_box)
-    #         else:
-    #             new_box = CharBox(clean_special_chars(lsp[0]), ul, lr)
-    #             all_chars.append(new_box)
-    #
-    #         prev_xpos = cur_xpos
-    #
-    # # delete working directory
-    # if on_windows:
-    #     shutil.rmtree(dir)
-    # else:
-    #     subprocess.check_call('rm -r ' + dir, shell=True)
-
     all_chars = []
     if existing_ocr_pickle:
         try:
@@ -292,7 +227,6 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
         except subprocess.CalledProcessError:
             print('OCRopus failed! Skipping current file.')
             return None
-
 
     #############################
     # -- HANDLE ABBREVIATIONS --
@@ -436,10 +370,8 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    text_func = psc.filename_to_text_func()
-    # f_inds = list(np.random.choice(range(1, 550), 40))
+    text_func = psc.filename_to_text_func('123723_Salzinnes.csv', 'mapping.csv')
     f_inds = range(60, 62)
-    # fnames = ['einsiedeln_{:0>3}v'.format(f_ind) for f_ind in f_inds]
 
     for ind in f_inds:
         fname = 'salzinnes_{:0>3}'.format(ind)
@@ -470,10 +402,3 @@ if __name__ == '__main__':
             pickle.dump(all_chars, f, -1)
 
         draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)
-
-        # ocr = process(raw_image, '', wkdir_name='test', return_ocr=True)
-        # if ocr is None:
-        #     continue
-        # ocr_fname = './salzinnes_ocr/{}_ocr.txt'.format(fname)
-        # with open(ocr_fname, "w") as f:
-        #     f.write(ocr)

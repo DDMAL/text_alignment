@@ -1,32 +1,11 @@
 import PIL
 import pickle
 from PIL import Image, ImageDraw, ImageFont
-import json
+import ElementTree as ET
 import numpy as np
-
-
-def draw_ground_truth_alignment(ind):
-    ind = 77
-    fname = 'salzinnes_{:0>3}'.format(ind)
-
-    with open('./ground-truth-alignments/gt_{}.json'.format(fname), 'r') as j:
-        align_dict = json.load(j)
-
-    syl_boxes = align_dict['syl_boxes']
-    im = Image.open('./png/{}_text.png'.format(fname))
-    text_size = 70
-    fnt = ImageFont.truetype('FreeMono.ttf', text_size)
-    draw = ImageDraw.Draw(im)
-
-    for i, cbox in enumerate(syl_boxes):
-
-        ul = tuple(cbox['ul'])
-        lr = tuple(cbox['lr'])
-        draw.text((ul[0], ul[1] - text_size), cbox['syl'], font=fnt, fill='black')
-        draw.rectangle([ul, lr], outline='black')
-        draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=10)
-
-    im.save('./ground-truth-alignments/gt_{}.png'.format(fname))
+import textAlignPreprocessing as preproc
+import gamera.core as gc
+gc.init_gamera()
 
 
 def intersect(bb1, bb2):
@@ -69,17 +48,43 @@ def IOU(bb1, bb2):
     return float(area_int) / (area_1 + area_2 - area_int)
 
 
-def evaluate_alignment(ind):
+def black_area_IOU(bb1, bb2, image):
+    '''
+    intersection over union between two bounding boxes
+    '''
+    lr1 = bb1['lr']
+    ul1 = bb1['ul']
+    lr2 = bb2['lr']
+    ul2 = bb2['ul']
 
-    fname = 'salzinnes_{:0>3}'.format(ind)
-    with open('./ground-truth-alignments/gt_{}.json'.format(fname), 'r') as j:
+    new_ul = (max(ul1[0], ul2[0]), max(ul1[1], ul2[1]))
+    new_lr = (min(lr1[0], lr2[0]), min(lr1[1], lr2[1]))
+
+    bb1_subimage = image.subimage(ul1, lr1)
+    bb2_subimage = image.subimage(ul2, lr2)
+    intersect_subimage = image.subimage(new_ul, new_lr)
+
+    bb1_black = bb1_subimage.black_area()[0]
+    bb2_black = bb2_subimage.black_area()[0]
+    intersect_black = intersect_subimage.black_area()[0]
+
+    return float(intersect_black) / (bb1_black + bb2_black - intersect_black)
+
+
+def evaluate_alignment(manuscript, ind):
+
+    fname = '{}_{:0>3}'.format(manuscript, ind)
+    with open('./ground-truth-alignments/{}_gt.json'.format(fname), 'r') as j:
         gt_boxes = json.load(j)['syl_boxes']
 
     with open('./out_json/{}.json'.format(fname), 'r') as j:
         align_boxes = json.load(j)['syl_boxes']
 
+    raw_image = gc.load_image('./png/' + fname + '_text.png')
+    image, _, _ = preproc.preprocess_images(raw_image, correct_rotation=False)
+
     score = {}
-    black_area_score = 0
+    area_score = {}
     for box in gt_boxes:
         same_syl_boxes = [x for x in align_boxes if x['syl'] == box['syl']]
         if not same_syl_boxes:
@@ -89,4 +94,6 @@ def evaluate_alignment(ind):
             continue
         best_box = same_syl_boxes[ints.index(max(ints))]
         score[box['syl']] = IOU(box, best_box)
-    print(np.mean(score.values()))
+        area_score[box['syl']] = black_area_IOU(box, best_box, image)
+
+    print(np.mean(score.values()), np.mean(area_score.values()))
