@@ -74,7 +74,7 @@ def black_area_IOU(bb1, bb2, image):
 
 #   manuscript = 'salzinnes'
 #   ind = '505'
-def evaluate_alignment(manuscript, ind):
+def evaluate_alignment(manuscript, ind, eval_difficult=False):
 
     fname = '{}_{:0>3}'.format(manuscript, ind)
     gt_xml = ET.parse('./ground-truth-alignments/{}_gt.xml'.format(fname))
@@ -104,11 +104,17 @@ def evaluate_alignment(manuscript, ind):
     score = {}
     area_score = {}
     for box in gt_boxes:
+        if box['difficult'] and not eval_difficult:
+            continue
         same_syl_boxes = [x for x in align_boxes if x['syl'] == box['syl']]
         if not same_syl_boxes:
+            score[box['syl']] = 0
+            area_score[box['syl']] = 0
             continue
         ints = [intersect(box, x) for x in same_syl_boxes]
         if not any(ints):
+            score[box['syl']] = 0
+            area_score[box['syl']] = 0
             continue
         best_box = same_syl_boxes[ints.index(max(ints))]
         score[box['syl']] = IOU(box, best_box)

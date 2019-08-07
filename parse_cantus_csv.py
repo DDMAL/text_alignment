@@ -87,11 +87,15 @@ def filename_to_text_func(transcript_path, mapping_path=None):
         chants = [combine_transcripts(x[13], x[14]) for x in chant_rows]
         folio_to_chants[name] = chants
 
-    def fname_to_text(inp):
-        find_folio = [(i, x) for (i, x) in enumerate(mapping) if inp == x['filename']]
+    def folio_to_text(inp):
+
+        if type(inp) == int:
+            find_folio = [(i, x) for (i, x) in enumerate(mapping) if inp == x['seq']]
+        else:
+            find_folio = [(i, x) for (i, x) in enumerate(mapping) if inp == x['folio']]
 
         if not find_folio:
-            raise ValueError('filename {} not found'.format(inp))
+            raise ValueError('folio / seq {} not found'.format(inp))
 
         if len(find_folio) > 1:
             raise ValueError('duplicates found for {}'.format(inp))
@@ -99,6 +103,7 @@ def filename_to_text_func(transcript_path, mapping_path=None):
         idx, entry = find_folio[0]
 
         folio = entry['folio']
+        fname = entry['filename']
         prev_entry = mapping[idx - 1]
         prev_folio = prev_entry['folio']
 
@@ -114,12 +119,16 @@ def filename_to_text_func(transcript_path, mapping_path=None):
             for chant in folio_to_chants[folio]:
                 text = text + ' ' + chant
 
-        return clean(text)
+        # to handle salzinnes, as a quick hack.
+        fname = fname.replace('CF-', '')
+        return fname, clean(text)
 
-    return fname_to_text
+    return folio_to_text
 
 
 if __name__ == '__main__':
-    text_func = filename_to_text_func()
-    transcript = text_func('CF-042')
+    text_func = filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
+    transcript = text_func(55)
+    print(transcript)
+    transcript = text_func('142v')
     print(transcript)

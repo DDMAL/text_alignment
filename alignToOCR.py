@@ -357,36 +357,41 @@ def draw_results_on_page(image, syl_boxes, lines_peak_locs):
         draw.text((1, peak_loc - text_size), 'line {}'.format(i), font=fnt, fill='gray')
         draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
-    im.save('./out_imgs/testimg_{}.png'.format(fname))
+    im.save('./out_imgs/{}_alignment.png'.format(fname))
     # im.show()
 
 
 if __name__ == '__main__':
 
-    import parse_salzinnes_csv as psc
-    reload(psc)
+    import parse_cantus_csv as pcc
+    reload(pcc)
     import PIL
     import pickle
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    text_func = psc.filename_to_text_func('123723_Salzinnes.csv', 'mapping.csv')
-    f_inds = range(60, 62)
+    # text_func = psc.filename_to_text_func('./csv/123723_Salzinnes.csv', 'mapping.csv')
+    # manuscript = 'salzinnes'
+    # f_inds = range(60, 62)
+
+    text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
+    manuscript = 'einsiedeln'
+    f_inds = range(1, 6)
 
     for ind in f_inds:
-        fname = 'salzinnes_{:0>3}'.format(ind)
-        ocr_pickle = './salzinnes_ocr/{}_boxes.pickle'.format(fname)
 
+        try:
+            fname, transcript = text_func(ind)
+        except ValueError:
+            print('no chants listed for page {}'.format(ind))
+            continue
+
+        fname = '{}_{}'.format(manuscript, fname)
+        ocr_pickle = './salzinnes_ocr/{}_boxes.pickle'.format(fname)
         text_layer_fname = './png/{}_text.png'.format(fname)
 
         if not os.path.isfile(text_layer_fname):
             print('cannot find files for {}.'.format(fname))
-            continue
-
-        try:
-            transcript = text_func('CF-{:0>3}'.format(ind))
-        except ValueError:
-            print('no chants listed for page {}'.format(fname))
             continue
 
         print('processing {}...'.format(fname))
