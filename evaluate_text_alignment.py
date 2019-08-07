@@ -1,7 +1,8 @@
 import PIL
 import pickle
 from PIL import Image, ImageDraw, ImageFont
-import ElementTree as ET
+import xml.etree.ElementTree as ET
+import json
 import numpy as np
 import textAlignPreprocessing as preproc
 import gamera.core as gc
@@ -71,11 +72,28 @@ def black_area_IOU(bb1, bb2, image):
     return float(intersect_black) / (bb1_black + bb2_black - intersect_black)
 
 
+#   manuscript = 'salzinnes'
+#   ind = '505'
 def evaluate_alignment(manuscript, ind):
 
     fname = '{}_{:0>3}'.format(manuscript, ind)
-    with open('./ground-truth-alignments/{}_gt.json'.format(fname), 'r') as j:
-        gt_boxes = json.load(j)['syl_boxes']
+    gt_xml = ET.parse('./ground-truth-alignments/{}_gt.xml'.format(fname))
+    gt_boxes = []
+    els = list(gt_xml.getroot())
+    for el in els:
+        if not el.tag == 'object':
+            continue
+        diff = int(el.find('difficult').text)
+        name = el.find('name').text
+        bb = el.find('bndbox')
+        ul = int(bb.find('xmin').text), int(bb.find('ymin').text)
+        lr = int(bb.find('xmax').text), int(bb.find('ymax').text)
+        gt_boxes.append({
+            'syl': name,
+            'difficult': diff,
+            'ul': ul,
+            'lr': lr
+        })
 
     with open('./out_json/{}.json'.format(fname), 'r') as j:
         align_boxes = json.load(j)['syl_boxes']
