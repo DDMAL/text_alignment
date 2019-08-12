@@ -4,8 +4,6 @@ import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
-from gamera import graph_util
-from gamera import graph
 import itertools as iter
 import os
 import re
@@ -14,7 +12,7 @@ import re
 saturation_thresh = 0.9
 sat_area_thresh = 150
 despeckle_amt = 100            # an int in [1,100]: ignore ccs with area smaller than this
-noise_area_thresh = 200        # an int in : ignore ccs with area smaller than this
+noise_area_thresh = 100        # an int in : ignore ccs with area smaller than this
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 30                # size of moving-average filter used to smooth projection
@@ -27,13 +25,13 @@ cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a spac
 max_distance_to_staff = 200
 
 # i need a custom set of colors when working on cc analysis because i'm too colorblind for the default :(
-colors = [ gc.RGBPixel(150, 0, 0),
-           gc.RGBPixel(0, 100, 0),
-           gc.RGBPixel(0, 0, 255),
-           gc.RGBPixel(250, 0, 255),
-           gc.RGBPixel(50, 150, 50),
-           gc.RGBPixel(0, 190, 230),
-           gc.RGBPixel(230, 100, 20) ]
+colors = [gc.RGBPixel(150, 0, 0),
+          gc.RGBPixel(0, 100, 0),
+          gc.RGBPixel(0, 0, 255),
+          gc.RGBPixel(250, 0, 255),
+          gc.RGBPixel(50, 150, 50),
+          gc.RGBPixel(0, 190, 230),
+          gc.RGBPixel(230, 100, 20)]
 
 
 def vertically_coincide(hline_position, comp_offset, comp_nrows, collision, collision_scale=collision_strip_scale):
@@ -286,44 +284,6 @@ def identify_text_lines(image_bin, image_eroded):
     return line_strips, peak_locations, smoothed_projection
 
 
-def group_ccs(cc_list, gap_tolerance=cc_group_gap_min):
-    '''
-    a helper function that takes in a list of ccs on the same line and groups them together based
-    on contiguity of their bounding boxes along the horizontal axis.
-    '''
-
-    cc_copy = cc_list[:]
-    result = [[cc_copy.pop(0)]]
-
-    # iterate over copy of this the line, removing
-    while(cc_copy):
-
-        current_group = result[-1]
-        left_bound = min([x.offset_x for x in current_group]) - gap_tolerance
-        right_bound = max([x.offset_x + x.ncols for x in current_group]) + gap_tolerance
-
-        overlaps = [x for x in cc_copy if
-                    (left_bound <= x.offset_x <= right_bound) or
-                    (left_bound <= x.offset_x + x.ncols <= right_bound)
-                    ]
-
-        if not overlaps:
-            result.append([cc_copy.pop(0)])
-            continue
-
-        for x in overlaps:
-            result[-1].append(x)
-            cc_copy.remove(x)
-
-    gap_sizes = []
-    for n in range(len(result)-1):
-        left = result[n][-1].offset_x + result[n][-1].ncols
-        right = result[n+1][0].offset_x
-        gap_sizes.append(right - left)
-
-    return result, gap_sizes
-
-
 def smear_lines(image, points_factor=0.005):
     filt = image.image_copy()
     print('connected component analysis...')
@@ -490,7 +450,7 @@ def save_preproc_image(image, cc_strips, lines_peak_locs, fname):
 if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
 
-    fnames = ['einsiedeln_003v']
+    fnames = ['stgall390_023']
 
     for fname in fnames:
         print('processing {}...'.format(fname))

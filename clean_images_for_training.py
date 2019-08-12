@@ -42,7 +42,7 @@ def clean_image(input_image, despeckle_amt=25, filter_runs=1, filter_runs_amt=1,
 
 if __name__ == '__main__':
 
-    manuscript = 'salzinnes'
+    manuscript = 'stgall390'
     all_files = os.listdir('./png/')
     fnames = [x for x in all_files if 'text.png' in x and manuscript in x]
 
@@ -50,8 +50,7 @@ if __name__ == '__main__':
         print('processing ' + filename + '...')
 
         raw_image = gc.load_image('./png/' + filename)
-        img = clean_image(raw_image)
-        cc_lines, peaks_locs = preproc.identify_text_lines(img)
-        cc_lines_flat = [item for sublist in cc_lines for item in sublist]
-        unioned_lines = union_images(cc_lines_flat)
+        image, eroded, angle = preproc.preprocess_images(raw_image, despeckle_amt=20, filter_runs=0)
+        line_strips, lines_peak_locs, proj = preproc.identify_text_lines(image, eroded)
+        unioned_lines = union_images(line_strips)
         unioned_lines.save_image('cleaned_' + filename)

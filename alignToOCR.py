@@ -15,12 +15,12 @@ import subprocess
 import json
 import re
 import io
+import tempfile
 
 reload(preproc)
 reload(tsc)
 reload(latsyl)
 
-ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 parallel = 2
 median_line_mult = 2
 
@@ -125,9 +125,10 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     return CharBox(cbox.char, new_ul, new_lr)
 
 
-def perform_ocr_with_ocropus(cc_strips, wkdir_name='', parallel=parallel, ocropus_model=ocropus_model):
+def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name='ocropy_', parallel=parallel):
     # make directory to do stuff in
     dir = 'wkdir_' + wkdir_name
+    # dir = tempfile.mkdtemp(prefix=wkdir_name)
     if not os.path.exists(dir):
         subprocess.check_call("mkdir " + dir, shell=True)
 
@@ -194,7 +195,7 @@ def perform_ocr_with_ocropus(cc_strips, wkdir_name='', parallel=parallel, ocropu
     return all_chars
 
 
-def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, ocropus_model=ocropus_model, verbose=True, return_ocr=False, existing_ocr_pickle=None):
+def process(raw_image, transcript, ocropus_model, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, verbose=True, existing_ocr_pickle=None, existing_preproc_images=None):
     '''
     given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
     and OCR on the text layer and then aligns the results to the transcript text.
@@ -205,7 +206,10 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     #######################
 
     # get raw image of text layer and preform preprocessing to find text lines
-    image, eroded, angle = preproc.preprocess_images(raw_image)
+    if existing_preproc_images:
+        image, eroded, angle = existing_preproc_images
+    else:
+        image, eroded, angle = preproc.preprocess_images(raw_image)
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(image, eroded)
 
     #################################
@@ -223,7 +227,7 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
 
     if not all_chars:
         try:
-            all_chars = perform_ocr_with_ocropus(cc_strips, wkdir_name='', parallel=parallel, ocropus_model=ocropus_model)
+            all_chars = perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name='', parallel=parallel, )
         except subprocess.CalledProcessError:
             print('OCRopus failed! Skipping current file.')
             return None
@@ -250,9 +254,6 @@ def process(raw_image, transcript, wkdir_name='', parallel=parallel, median_line
     # get full ocr transcript
     ocr = ''.join(x.char for x in all_chars)
     all_chars_copy = list(all_chars)
-
-    if return_ocr:
-        return ocr
 
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
@@ -373,21 +374,29 @@ if __name__ == '__main__':
     # text_func = psc.filename_to_text_func('./csv/123723_Salzinnes.csv', 'mapping.csv')
     # manuscript = 'salzinnes'
     # f_inds = range(60, 62)
+    # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 
-    text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
-    manuscript = 'einsiedeln'
-    f_inds = range(1, 6)
+    # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
+    # manuscript = 'einsiedeln'
+    # f_inds = range(1, 6)
+    # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
+
+    text_func = pcc.filename_to_text_func('./csv/stgall390_123717.csv')
+    manuscript = 'stgall390'
+    f_inds = ['022', '023', '024', '025', '007']
+    ocropus_model = 'latinhist_stgall_model-00098500.pyrnn.gz'
 
     for ind in f_inds:
 
         try:
             fname, transcript = text_func(ind)
-        except ValueError:
+        except ValueError as e:
+            print(e)
             print('no chants listed for page {}'.format(ind))
             continue
 
         fname = '{}_{}'.format(manuscript, fname)
-        ocr_pickle = './salzinnes_ocr/{}_boxes.pickle'.format(fname)
+        ocr_pickle = None  # './salzinnes_ocr/{}_boxes.pickle'.format(fname)
         text_layer_fname = './png/{}_text.png'.format(fname)
 
         if not os.path.isfile(text_layer_fname):
@@ -397,13 +406,13 @@ if __name__ == '__main__':
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
 
-        result = process(raw_image, transcript, wkdir_name='test', existing_ocr_pickle=ocr_pickle)
+        result = process(raw_image, transcript, ocropus_model, wkdir_name='test', existing_ocr_pickle=ocr_pickle)
         if result is None:
             continue
         syl_boxes, image, lines_peak_locs, all_chars = result
         with open('./out_json/{}.json'.format(fname), 'w') as outjson:
             json.dump(to_JSON_dict(syl_boxes, lines_peak_locs), outjson)
-        with open('./salzinnes_ocr/{}_boxes.pickle'.format(fname), 'wb') as f:
+        with open('./pik/{}_boxes.pickle'.format(fname), 'wb') as f:
             pickle.dump(all_chars, f, -1)
 
         draw_results_on_page(raw_image, syl_boxes, lines_peak_locs)

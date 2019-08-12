@@ -3,17 +3,10 @@ from unidecode import unidecode
 import matplotlib.pyplot as plt
 
 # scoring system
-match = 10
-mismatch = -5
+default_match = 10
+default_mismatch = -5
 gap_open = -10
 gap_extend = -1
-
-
-def _default_score_method(a, b):
-    if a == b:
-        return match
-    else:
-        return mismatch
 
 
 def perform_alignment(transcript, ocr, scoring_method=False, gap_open=gap_open,
@@ -24,13 +17,22 @@ def perform_alignment(transcript, ocr, scoring_method=False, gap_open=gap_open,
 
     # these can be set individually to modify the affine gap penalties for gaps in the x or y direction
     # but i've yet to find a situation where doing this actually improves alignment results
-    gap_open_x = gap_open
-    gap_extend_x = gap_extend
-    gap_open_y = gap_open
-    gap_extend_y = gap_extend
+    gap_open_x = gap_open[0] if type(gap_open) == tuple else gap_open
+    gap_open_y = gap_open[1] if type(gap_open) == tuple else gap_open
+    gap_extend_x = gap_extend[0] if type(gap_extend) == tuple else gap_extend
+    gap_extend_y = gap_extend[1] if type(gap_extend) == tuple else gap_extend
 
     if not scoring_method:
-        scoring_method = _default_score_method
+        def default_score_method(a, b):
+            return default_match if a == b else default_mismatch
+        scoring_method = default_score_method
+    elif not callable(scoring_method):
+        def default_score_method(a, b):
+            return scoring_method[0] if a == b else scoring_method[1]
+        scoring_method = default_score_method
+
+
+
 
     # y_mat and x_mat keep track of gaps in horizontal and vertical directions
     mat = np.zeros((len(transcript), len(ocr)))

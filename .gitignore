@@ -9,11 +9,13 @@ testplot*
 testspacing*
 wkdir_*/
 png/
+*.png
+*.gz
 .DS_Store
 alignenv/
 *.ttf
 ocropy-master/*
-salzinnes_ocr/*
+pik/*
 ground-truth-alignments/*
 csv/*
 

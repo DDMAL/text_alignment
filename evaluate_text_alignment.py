@@ -72,8 +72,6 @@ def black_area_IOU(bb1, bb2, image):
     return float(intersect_black) / (bb1_black + bb2_black - intersect_black)
 
 
-#   manuscript = 'salzinnes'
-#   ind = '505'
 def evaluate_alignment(manuscript, ind, eval_difficult=False):
 
     fname = '{}_{:0>3}'.format(manuscript, ind)
