@@ -195,7 +195,16 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name='ocropy_', par
     return all_chars
 
 
-def process(raw_image, transcript, ocropus_model, wkdir_name='', parallel=parallel, median_line_mult=median_line_mult, verbose=True, existing_ocr_pickle=None, existing_preproc_images=None):
+def process(raw_image,
+    transcript,
+    ocropus_model,
+    seq_align_params=None,
+    wkdir_name='',
+    parallel=parallel,
+    median_line_mult=median_line_mult,
+    existing_ocr_pickle=None,
+    existing_preproc_images=None,
+    verbose=True):
     '''
     given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
     and OCR on the text layer and then aligns the results to the transcript text.
@@ -258,7 +267,8 @@ def process(raw_image, transcript, ocropus_model, wkdir_name='', parallel=parall
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
-    tra_align, ocr_align = tsc.perform_alignment(list(transcript), list(ocr), verbose=False)
+    tra_align, ocr_align = tsc.perform_alignment(list(transcript), list(ocr),
+        scoring_system=seq_align_params, verbose=False)
     tra_align = ''.join(tra_align)
     ocr_align = ''.join(ocr_align)
     syls = latsyl.syllabify_text(transcript)
@@ -384,7 +394,7 @@ if __name__ == '__main__':
     text_func = pcc.filename_to_text_func('./csv/stgall390_123717.csv')
     manuscript = 'stgall390'
     f_inds = ['022', '023', '024', '025', '007']
-    ocropus_model = 'latinhist_stgall_model-00098500.pyrnn.gz'
+    ocropus_model = 'stgall2-00017000.pyrnn.gz'
 
     for ind in f_inds:
 
@@ -396,7 +406,7 @@ if __name__ == '__main__':
             continue
 
         fname = '{}_{}'.format(manuscript, fname)
-        ocr_pickle = None  # './salzinnes_ocr/{}_boxes.pickle'.format(fname)
+        ocr_pickle = None  # './pik/{}_boxes.pickle'.format(fname)
         text_layer_fname = './png/{}_text.png'.format(fname)
 
         if not os.path.isfile(text_layer_fname):

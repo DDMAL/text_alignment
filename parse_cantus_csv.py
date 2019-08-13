@@ -20,6 +20,8 @@ def combine_transcripts(standard, ms):
     # MS spelling, which we'd rather use.
 
     ms = ms.replace('ihe', 'ie')
+
+    
     if not standard:
         return ms
 

@@ -11,7 +11,7 @@ Requires [OCRopus](https://github.com/tmbdev/ocropy) as well. OCRopus is not an 
 OCRopus only supports Mac officially. I've gotten this project to work on Windows on my machine, since it only needs one component of OCRopus, but YMMV. On Windows, parallel processing doesn't work, and you might see a bunch of warnings pop up during the text recognition part.
 
 ### How To Run Locally
-Run from alignToOCR.py. Just does one file at a time, at the moment - edit the parameters at the top of the ```__main__``` method to change what is processed. Given ```filename``` to process, this project will look for files at ```./png/filename_text.png``` and ```./png/filename_transcript.txt``` and output an image file with the results of the alignment visualized.
+Run from alignToOCR.py. Edit the parameters at the top of the ```__main__``` method to change what is processed.
 
 # How It Works
 
@@ -21,7 +21,7 @@ The input text layer can be pretty messy, so we need to clean it up a bit - this
 
 ### OCR with OCRopus
 
-OCRopus is not intended for use on handwritten text, but it gets a reasonably good result (80-90% per-character accuracy on most pages of Salzinnes using the relatively simple model included with this repo). Each identified text line is saved to a file, and the OCRopus command line tool ```ocropus-rpred``` is used to attempt OCR on each one, retrieving the characters found within the line and the position of each one on the page.
+OCRopus is not intended for use on handwritten text, but it gets a reasonably good result (~80% per-character accuracy on most pages of Salzinnes using the relatively simple model included with this repo). Each identified text line is saved to a file, and the OCRopus command line tool ```ocropus-rpred``` is used to attempt OCR on each one, retrieving the characters found within the line and the position of each one on the page.
 
 ### Aligning OCR with Correct Transcript
 
@@ -51,4 +51,6 @@ median_line_spacing: [median space between adjacent text lines, in pixels]
 
 # Training a New OCRopus model
 
-Use ```clean_images_for_training.py``` to generate a set of text lines from manuscript data. Then use ```ocropus-gtedit``` to create a ```temp-correction.html``` file - then you can start manually transcribing each text line. You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For Salzinnes, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was perfectly sufficient. Once you've transcribed enough, use ```ocropus-gtedit extract temp-correction.html``` to extract the information in the file and the ```ocropus-rtrain``` tool to train a model on the extracted data. You may want to explicitly specify a custom character set if your model uses a lot of special characters, or if there's many characters that you know for a fact are never used in the model. Further information: [OCRopus getting started guide](https://github.com/digiah/oldOCR/blob/master/ocropy_getting_started.pdf)
+Use ocropus's built-in page segmentation tools to generate a set of text lines from manuscript data. Then use ```ocropus-gtedit``` to create a ```temp-correction.html``` file - then you can start manually transcribing each text line. You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For Salzinnes, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was perfectly sufficient. Once you've transcribed enough, use ```ocropus-gtedit extract temp-correction.html``` to extract the information in the file and the ```ocropus-rtrain``` tool to train a model on the extracted data. You may want to explicitly specify a custom character set if your model uses a lot of special characters, or if there's many characters that you know for a fact are never used in the model.
+
+Further information, and the exact commands necessary: [OCRopus getting started guide](https://github.com/digiah/oldOCR/blob/master/ocropy_getting_started.pdf)

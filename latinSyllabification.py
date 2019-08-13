@@ -29,6 +29,10 @@ def syllabify_word(inp):
 
     if inp == 'euouae':
         return 'e-u-o-u-ae'.split('-')
+    if inp == 'cuius':
+        return 'cu-ius'.split('-')
+    if inp == 'eius':
+        return 'e-ius'.split('-')
 
     word = [inp]
 

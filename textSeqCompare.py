@@ -7,30 +7,36 @@ default_match = 10
 default_mismatch = -5
 gap_open = -10
 gap_extend = -1
+default_sys = [10, -5, -1, -1]
 
 
-def perform_alignment(transcript, ocr, scoring_method=False, gap_open=gap_open,
-                    gap_extend=gap_extend, verbose=False):
+def perform_alignment(transcript, ocr, scoring_system=default_sys, verbose=False):
+    '''
+    @scoring_system must be array-like, of one of the following forms:
+    [match_func(a,b), gap_open_x, gap_open_y, gap_extend_x, gap_extend_y]
+    [match, mismatch, gap_open_x, gap_open_y, gap_extend_x, gap_extend_y]
+    [match, mismatch, gap_open, gap_extend]
+    '''
 
     transcript = transcript + [' ']
     ocr = ocr + [' ']
 
-    # these can be set individually to modify the affine gap penalties for gaps in the x or y direction
-    # but i've yet to find a situation where doing this actually improves alignment results
-    gap_open_x = gap_open[0] if type(gap_open) == tuple else gap_open
-    gap_open_y = gap_open[1] if type(gap_open) == tuple else gap_open
-    gap_extend_x = gap_extend[0] if type(gap_extend) == tuple else gap_extend
-    gap_extend_y = gap_extend[1] if type(gap_extend) == tuple else gap_extend
-
-    if not scoring_method:
+    if len(scoring_system) == 5 and callable(scoring_system[0]):
+        scoring_method = scoring_system[0]
+        gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = scoring_system[-4:]
+    elif len(scoring_system) == 6:
         def default_score_method(a, b):
-            return default_match if a == b else default_mismatch
+            return scoring_system[0] if a == b else scoring_system[1]
         scoring_method = default_score_method
-    elif not callable(scoring_method):
+        gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = scoring_system[-4:]
+    elif len(scoring_system) == 4:
         def default_score_method(a, b):
-            return scoring_method[0] if a == b else scoring_method[1]
+            return scoring_system[0] if a == b else scoring_system[1]
         scoring_method = default_score_method
-
+        gap_open_x, gap_open_y = (scoring_system[2], scoring_system[2])
+        gap_extend_x, gap_extend_y = (scoring_system[3], scoring_system[3])
+    else:
+        raise ValueError('scoring_system {} invalid'.format(scoring_system))
 
 
 
@@ -178,7 +184,7 @@ if __name__ == '__main__':
     seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
     seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
 
-    a, b = perform_alignment(seq1, seq2, verbose=False)
+    a, b = perform_alignment(seq1, seq2, scoring_system=[10, -5, -7, -7])
     print('|'.join(a))
     print('|'.join(b))
 
