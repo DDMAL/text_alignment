@@ -10,7 +10,7 @@ testspacing*
 wkdir_*/
 png/
 *.png
-
+./ocr_*/*
 .DS_Store
 alignenv/
 *.ttf

@@ -7,10 +7,10 @@ default_match = 10
 default_mismatch = -5
 gap_open = -10
 gap_extend = -1
-default_sys = [10, -5, -1, -1]
+default_sys = [8, -4, -7, -7, -3, 0]
 
 
-def perform_alignment(transcript, ocr, scoring_system=default_sys, verbose=False):
+def perform_alignment(transcript, ocr, scoring_system=None, verbose=False):
     '''
     @scoring_system must be array-like, of one of the following forms:
     [match_func(a,b), gap_open_x, gap_open_y, gap_extend_x, gap_extend_y]
@@ -20,6 +20,9 @@ def perform_alignment(transcript, ocr, scoring_system=default_sys, verbose=False
 
     transcript = transcript + [' ']
     ocr = ocr + [' ']
+
+    if scoring_system is None:
+        scoring_system = default_sys
 
     if len(scoring_system) == 5 and callable(scoring_system[0]):
         scoring_method = scoring_system[0]
@@ -37,8 +40,6 @@ def perform_alignment(transcript, ocr, scoring_system=default_sys, verbose=False
         gap_extend_x, gap_extend_y = (scoring_system[3], scoring_system[3])
     else:
         raise ValueError('scoring_system {} invalid'.format(scoring_system))
-
-
 
     # y_mat and x_mat keep track of gaps in horizontal and vertical directions
     mat = np.zeros((len(transcript), len(ocr)))

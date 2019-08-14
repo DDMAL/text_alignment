@@ -6,6 +6,10 @@ import json
 import numpy as np
 import textAlignPreprocessing as preproc
 import gamera.core as gc
+import parse_cantus_csv as pcc
+import alignToOCR as atocr
+from itertools import product
+reload(atocr)
 gc.init_gamera()
 
 
@@ -72,9 +76,9 @@ def black_area_IOU(bb1, bb2, image):
     return float(intersect_black) / (bb1_black + bb2_black - intersect_black)
 
 
-def evaluate_alignment(manuscript, ind, eval_difficult=False):
+def evaluate_alignment(manuscript, ind, eval_difficult=False, json_dict=None):
 
-    fname = '{}_{:0>3}'.format(manuscript, ind)
+    fname = '{}_{}'.format(manuscript, ind)
     gt_xml = ET.parse('./ground-truth-alignments/{}_gt.xml'.format(fname))
     gt_boxes = []
     els = list(gt_xml.getroot())
@@ -93,8 +97,11 @@ def evaluate_alignment(manuscript, ind, eval_difficult=False):
             'lr': lr
         })
 
-    with open('./out_json/{}.json'.format(fname), 'r') as j:
-        align_boxes = json.load(j)['syl_boxes']
+    if json_dict:
+        align_boxes = json_dict['syl_boxes']
+    else:
+        with open('./out_json/{}.json'.format(fname), 'r') as j:
+            align_boxes = json.load(j)['syl_boxes']
 
     raw_image = gc.load_image('./png/' + fname + '_text.png')
     image, _, _ = preproc.preprocess_images(raw_image, correct_rotation=False)
@@ -104,7 +111,10 @@ def evaluate_alignment(manuscript, ind, eval_difficult=False):
     for box in gt_boxes:
         if box['difficult'] and not eval_difficult:
             continue
-        same_syl_boxes = [x for x in align_boxes if x['syl'] == box['syl']]
+        same_syl_boxes = [x for x in align_boxes
+            if x['syl'] in box['syl']
+            or box['syl'] in x['syl']
+            ]
         if not same_syl_boxes:
             score[box['syl']] = 0
             area_score[box['syl']] = 0
@@ -118,4 +128,71 @@ def evaluate_alignment(manuscript, ind, eval_difficult=False):
         score[box['syl']] = IOU(box, best_box)
         area_score[box['syl']] = black_area_IOU(box, best_box, image)
 
-    print(np.mean(score.values()), np.mean(area_score.values()))
+    return (np.mean(score.values()), np.mean(area_score.values()))
+
+
+def try_params(params):
+
+    gts = [{
+        'manuscript': 'salzinnes',
+        'folio': '020v',
+        'text_func': pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv'),
+        'ocr_model': './models/salzinnes_model-00054500.pyrnn.gz'
+    }, {
+        'manuscript': 'salzinnes',
+        'folio': 25,
+        'text_func': pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv'),
+        'ocr_model': './models/salzinnes_model-00054500.pyrnn.gz'
+    }, {
+        'manuscript': 'stgall390',
+        'folio': '023',
+        'text_func': pcc.filename_to_text_func('./csv/stgall390_123717.csv'),
+        'ocr_model': './models/stgall2-00017000.pyrnn.gz'
+    }]
+
+    results = []
+    for x in gts:
+        f_ind, transcript = x['text_func'](x['folio'])
+        manuscript = x['manuscript']
+        fname = '{}_{}'.format(manuscript, f_ind)
+        ocr_model = x['ocr_model']
+        ocr_pickle = './pik/{}_boxes.pickle'.format(fname)
+        text_layer_fname = './png/{}_text.png'.format(fname)
+        raw_image = gc.load_image('./png/' + fname + '_text.png')
+
+        result = atocr.process(raw_image, transcript,
+            ocr_model, seq_align_params=params, existing_ocr_pickle=ocr_pickle)
+
+        syl_boxes, image, lines_peak_locs, all_chars = result
+        json_dict = atocr.to_JSON_dict(syl_boxes, lines_peak_locs)
+        res = evaluate_alignment(manuscript, f_ind, eval_difficult=False, json_dict=json_dict)
+
+        with open('./pik/{}_boxes.pickle'.format(fname), 'wb') as f:
+            pickle.dump(all_chars, f, -1)
+
+        results.append(res[1])
+
+    return np.mean(results)
+
+
+if __name__ == '__main__':
+    logs = {}
+
+    params = np.array(list(product(
+        [5, 8, 11],
+        [-4, -7, -10],
+        [-2, -5, -7],
+        [-2, -5, -7],
+        [0, -3, -5],
+        [0, -3, -5],
+    )))
+    np.random.shuffle(params)
+
+    for p in params:
+        res = try_params(p)
+        logs[tuple(p)] = res
+        print(p, res)
+
+    p = [(k, logs[tuple(k)]) for k in logs.keys()]
+    p = sorted(p, key=lambda x: x[1])
+    print(p)

@@ -4,6 +4,7 @@ import gamera.core as gc
 gc.init_gamera()
 import matplotlib.pyplot as plt
 from gamera.plugins.image_utilities import union_images
+import pickle
 import itertools as iter
 import os
 import re
@@ -458,7 +459,7 @@ if __name__ == '__main__':
         image, eroded, angle = preprocess_images(raw_image)
         line_strips, lines_peak_locs, proj = identify_text_lines(image, eroded)
 
-        save_preproc_image(image, line_strips, lines_peak_locs, fname)
+        # save_preproc_image(image, line_strips, lines_peak_locs, fname)
 
     # plt.clf()
     # plt.plot(proj)

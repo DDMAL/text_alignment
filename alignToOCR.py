@@ -125,40 +125,35 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     return CharBox(cbox.char, new_ul, new_lr)
 
 
-def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name='ocropy_', parallel=parallel):
-    # make directory to do stuff in
-    dir = 'wkdir_' + wkdir_name
-    # dir = tempfile.mkdtemp(prefix=wkdir_name)
-    if not os.path.exists(dir):
-        subprocess.check_call("mkdir " + dir, shell=True)
+def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=parallel):
 
     # save strips to directory
     for i, strip in enumerate(cc_strips):
-        strip.save_image('./{}/{}_{}.png'.format(dir, wkdir_name, i))
+        strip.save_image('./{}/_{}.png'.format(wkdir_name, i))
 
     # call ocropus command to do OCR on each saved line strip.
     if on_windows:
         cwd = os.getcwd()
         ocropus_command = 'python ./ocropy-master/ocropus-rpred ' \
-            '--nocheck --llocs -m {} {}/{}/*'.format(ocropus_model, cwd, dir)
+            '--nocheck --llocs -m {} {}/{}/*'.format(ocropus_model, cwd, wkdir_name)
     else:
         # the presence of extra quotes \' around the path to be globbed makes a difference.
         # sometimes. it's unclear.
         ocropus_command = 'ocropus-rpred -Q {} ' \
-            '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, dir)
+            '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, wkdir_name)
 
     print('running ocropus with: {}'.format(ocropus_command))
-    try:
-        subprocess.check_call(ocropus_command, shell=True)
-    except subprocess.CalledProcessError:
-        print('OCRopus failed! Skipping current file.')
-        return None
+    # try:
+    subprocess.check_call(ocropus_command, shell=True)
+    # except subprocess.CalledProcessError:
+    #     print('OCRopus failed! Skipping current file.')
+    #     return None
 
     # read character position results from llocs file
     all_chars = []
     other_chars = []
     for i in range(len(cc_strips)):
-        locs_file = './{}/{}_{}.llocs'.format(dir, wkdir_name, i)
+        locs_file = './{}/_{}.llocs'.format(wkdir_name, i)
         with io.open(locs_file, encoding='utf-8') as f:
             locs = [line.rstrip('\n') for line in f]
 
@@ -186,12 +181,6 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name='ocropy_', par
 
             prev_xpos = cur_xpos
 
-    # delete working directory
-    if on_windows:
-        shutil.rmtree(dir)
-    else:
-        subprocess.check_call('rm -r ' + dir, shell=True)
-
     return all_chars
 
 
@@ -199,7 +188,7 @@ def process(raw_image,
     transcript,
     ocropus_model,
     seq_align_params=None,
-    wkdir_name='',
+    wkdir_name='wkdir_ocropy',
     parallel=parallel,
     median_line_mult=median_line_mult,
     existing_ocr_pickle=None,
@@ -215,10 +204,17 @@ def process(raw_image,
     #######################
 
     # get raw image of text layer and preform preprocessing to find text lines
-    if existing_preproc_images:
-        image, eroded, angle = existing_preproc_images
-    else:
-        image, eroded, angle = preproc.preprocess_images(raw_image)
+    # image = None
+    # if existing_preproc_images:
+    #     try:
+    #         with open(existing_ocr_pickle) as f:
+    #             image, eroded, angle = pickle.load(f)
+    #         print('using pickled preproc results in {}...'.format(existing_ocr_pickle))
+    #     except IOError:
+    #         print('Pickle file {} not found - performing ocr instead'.format(existing_ocr_pickle))
+    # if not image:
+    image, eroded, angle = preproc.preprocess_images(raw_image)
+
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(image, eroded)
 
     #################################
@@ -233,13 +229,20 @@ def process(raw_image,
             print('using pickled ocr results in {}...'.format(existing_ocr_pickle))
         except IOError:
             print('Pickle file {} not found - performing ocr instead'.format(existing_ocr_pickle))
+        except AttributeError:
+            print('Pickle error: re-performing ocr')
 
     if not all_chars:
+        # make directory to do stuff in d
+        if not os.path.exists(wkdir_name):
+            subprocess.check_call("mkdir " + wkdir_name, shell=True)
         try:
-            all_chars = perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name='', parallel=parallel, )
+            all_chars = perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name=wkdir_name, parallel=parallel, )
         except subprocess.CalledProcessError:
             print('OCRopus failed! Skipping current file.')
             return None
+        finally:
+            subprocess.check_call('rm -r ' + wkdir_name, shell=True)
 
     #############################
     # -- HANDLE ABBREVIATIONS --
@@ -350,7 +353,7 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
 
 def draw_results_on_page(image, syl_boxes, lines_peak_locs):
     im = image.to_greyscale().to_pil()
-    text_size = 70
+    text_size = image.ncols // 64
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
@@ -381,7 +384,7 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    # text_func = psc.filename_to_text_func('./csv/123723_Salzinnes.csv', 'mapping.csv')
+    # text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     # manuscript = 'salzinnes'
     # f_inds = range(60, 62)
     # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
@@ -391,9 +394,14 @@ if __name__ == '__main__':
     # f_inds = range(1, 6)
     # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 
-    text_func = pcc.filename_to_text_func('./csv/stgall390_123717.csv')
-    manuscript = 'stgall390'
-    f_inds = ['022', '023', '024', '025', '007']
+    # text_func = pcc.filename_to_text_func('./csv/stgall390_123717.csv')
+    # manuscript = 'stgall390'
+    # f_inds = ['022', '023', '024', '025', '007']
+    # ocropus_model = 'stgall2-00017000.pyrnn.gz'
+
+    text_func = pcc.filename_to_text_func('./csv/stmaurf_123628.csv')
+    manuscript = 'stmaurf'
+    f_inds = ['049r']
     ocropus_model = 'stgall2-00017000.pyrnn.gz'
 
     for ind in f_inds:
@@ -416,7 +424,9 @@ if __name__ == '__main__':
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
 
-        result = process(raw_image, transcript, ocropus_model, wkdir_name='test', existing_ocr_pickle=ocr_pickle)
+        id = hex(np.random.randint(2**32))
+        result = process(raw_image, transcript, ocropus_model,
+            wkdir_name='ocr_{}'.format(id), existing_ocr_pickle=ocr_pickle)
         if result is None:
             continue
         syl_boxes, image, lines_peak_locs, all_chars = result
