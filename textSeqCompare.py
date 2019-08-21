@@ -1,6 +1,5 @@
 import numpy as np
 from unidecode import unidecode
-import matplotlib.pyplot as plt
 
 # scoring system
 default_match = 10

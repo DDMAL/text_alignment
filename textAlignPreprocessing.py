@@ -207,7 +207,6 @@ def identify_text_lines(image_bin, image_eroded):
     '''
 
     # compute y-axis projection of input image and filter with sliding window average
-    print('finding projection peaks...')
     project = image_eroded.projection_rows()
     smoothed_projection = moving_avg_filter(project, filter_size)
 
@@ -225,7 +224,6 @@ def identify_text_lines(image_bin, image_eroded):
 
     # perform connected component analysis and remove sufficiently small ccs and ccs that are too
     # tall; assume these to be ornamental letters
-    print('connected component analysis...')
     components = image_eroded.cc_analysis()
 
     for c in components:

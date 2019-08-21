@@ -1,9 +1,12 @@
 - mimetype: application/json
   description: JSON
   extension: json
-- mimetype: image/rgba+png
-  description: PNG image file with alpha channel
+- mimetype: image/rgb+png
+  description: RGB PNG image
   extension: png
 - mimetype: text/plain
-  description: plaintext file
+  description: Plain text
   extension: txt
+- mimetype: application/pyrnn
+  description: OCR model trained by OCRopus
+  extention: pyrnn

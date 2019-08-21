@@ -5,7 +5,6 @@ gc.init_gamera()
 from gamera.plugins.image_utilities import union_images
 import matplotlib.pyplot as plt
 import textAlignPreprocessing as preproc
-import pickle
 import os
 import shutil
 import numpy as np
@@ -53,9 +52,9 @@ class CharBox(object):
 
     def __repr__(self):
         if self.ul and self.lr:
-            return '{}: {}, {}'.format(self.char, self.ul, self.lr)
+            return 'CharBox: \'{}\' at {}, {}'.format(self.char, self.ul, self.lr)
         else:
-            return '{}: empty'.format(self.char)
+            return 'CharBox: \'{}\' empty'.format(self.char)
 
 
 def clean_special_chars(inp):
@@ -139,15 +138,11 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=para
     else:
         # the presence of extra quotes \' around the path to be globbed makes a difference.
         # sometimes. it's unclear.
-        ocropus_command = 'ocropus-rpred -Q {} ' \
-            '--nocheck --llocs -m {} \'{}/*.png\''.format(parallel, ocropus_model, wkdir_name)
+        ocropus_command = 'ocropus-rpred -q ' \
+            '--nocheck --llocs -m {} \'{}/*.png\''.format(ocropus_model, wkdir_name)
 
     print('running ocropus with: {}'.format(ocropus_command))
-    # try:
     subprocess.check_call(ocropus_command, shell=True)
-    # except subprocess.CalledProcessError:
-    #     print('OCRopus failed! Skipping current file.')
-    #     return None
 
     # read character position results from llocs file
     all_chars = []
@@ -185,15 +180,14 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=para
 
 
 def process(raw_image,
-    transcript,
-    ocropus_model,
-    seq_align_params=None,
-    wkdir_name='wkdir_ocropy',
-    parallel=parallel,
-    median_line_mult=median_line_mult,
-    existing_ocr_pickle=None,
-    existing_preproc_images=None,
-    verbose=True):
+            transcript,
+            ocropus_model,
+            seq_align_params=None,
+            wkdir_name='wkdir_ocropy',
+            parallel=parallel,
+            median_line_mult=median_line_mult,
+            existing_ocr=None,
+            verbose=True):
     '''
     given a text layer image @raw_image and a string transcript @transcript, performs preprocessing
     and OCR on the text layer and then aligns the results to the transcript text.
@@ -204,33 +198,15 @@ def process(raw_image,
     #######################
 
     # get raw image of text layer and preform preprocessing to find text lines
-    # image = None
-    # if existing_preproc_images:
-    #     try:
-    #         with open(existing_ocr_pickle) as f:
-    #             image, eroded, angle = pickle.load(f)
-    #         print('using pickled preproc results in {}...'.format(existing_ocr_pickle))
-    #     except IOError:
-    #         print('Pickle file {} not found - performing ocr instead'.format(existing_ocr_pickle))
-    # if not image:
+    print('identifying text lines...')
     image, eroded, angle = preproc.preprocess_images(raw_image)
-
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(image, eroded)
 
     #################################
     # -- PERFORM OCR WITH OCROPUS --
     #################################
 
-    all_chars = []
-    if existing_ocr_pickle:
-        try:
-            with open(existing_ocr_pickle) as f:
-                all_chars = pickle.load(f)
-            print('using pickled ocr results in {}...'.format(existing_ocr_pickle))
-        except IOError:
-            print('Pickle file {} not found - performing ocr instead'.format(existing_ocr_pickle))
-        except AttributeError:
-            print('Pickle error: re-performing ocr')
+    all_chars = existing_ocr
 
     if not all_chars:
         # make directory to do stuff in d
@@ -247,6 +223,7 @@ def process(raw_image,
     #############################
     # -- HANDLE ABBREVIATIONS --
     #############################
+    print('handling abbreviations...')
 
     abbreviations = latsyl.abbreviations
     for abb in abbreviations.keys():
@@ -270,16 +247,19 @@ def process(raw_image,
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
+    print('performing alignment...')
     tra_align, ocr_align = tsc.perform_alignment(list(transcript), list(ocr),
         scoring_system=seq_align_params, verbose=False)
     tra_align = ''.join(tra_align)
     ocr_align = ''.join(ocr_align)
-    syls = latsyl.syllabify_text(transcript)
 
+    print('syllabifying...')
+    syls = latsyl.syllabify_text(transcript)
     align_transcript_boxes = []
     current_offset = 0
     syl_boxes = []
 
+    print('matching syllables to alignment...')
     # insert gaps into ocr output based on alignment string. this causes all_chars to have gaps at the
     # same points as the ocr_align string does, and is thus the same length as tra_align.
     for i, char in enumerate(ocr_align):
@@ -293,9 +273,8 @@ def process(raw_image,
 
     # for each syllable in the transcript, find what characters (or gaps) of the ocr that syllable
     # is aligned to.
-
     for syl in syls:
-
+        print(syl)
         if len(syl) < 1:
             continue
         elif len(syl) == 1:
@@ -323,6 +302,7 @@ def process(raw_image,
         new_lr = (max(x.lrx for x in align_boxes), max(x.lry for x in align_boxes))
         syl_boxes.append(CharBox(syl, new_ul, new_lr))
 
+    print('rotating bboxes again...')
     # finally, rotate syl_boxes back by the angle that the page was rotated by
     for i in range(len(syl_boxes)):
         syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, image.dim, raw_image.dim)
@@ -384,10 +364,10 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    # text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
-    # manuscript = 'salzinnes'
-    # f_inds = range(60, 62)
-    # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
+    text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
+    manuscript = 'salzinnes'
+    f_inds = ['028r']
+    ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
     # manuscript = 'einsiedeln'
@@ -399,10 +379,10 @@ if __name__ == '__main__':
     # f_inds = ['022', '023', '024', '025', '007']
     # ocropus_model = 'stgall2-00017000.pyrnn.gz'
 
-    text_func = pcc.filename_to_text_func('./csv/stmaurf_123628.csv')
-    manuscript = 'stmaurf'
-    f_inds = ['049r']
-    ocropus_model = 'stgall2-00017000.pyrnn.gz'
+    # text_func = pcc.filename_to_text_func('./csv/stmaurf_123628.csv')
+    # manuscript = 'stmaurf'
+    # f_inds = ['049r']
+    # ocropus_model = 'stgall2-00017000.pyrnn.gz'
 
     for ind in f_inds:
 
@@ -424,9 +404,20 @@ if __name__ == '__main__':
         print('processing {}...'.format(fname))
         raw_image = gc.load_image('./png/' + fname + '_text.png')
 
+        existing_ocr = None
+        if ocr_pickle:
+            try:
+                with open(ocr_pickle) as f:
+                    existing_ocr = pickle.load(f)
+                print('using pickled ocr results in {}...'.format(ocr_pickle))
+            except IOError:
+                print('Pickle file {} not found - performing ocr instead'.format(ocr_pickle))
+            except AttributeError:
+                print('Pickle error: re-performing ocr')
+
         id = hex(np.random.randint(2**32))
         result = process(raw_image, transcript, ocropus_model,
-            wkdir_name='ocr_{}'.format(id), existing_ocr_pickle=ocr_pickle)
+            wkdir_name='ocr_{}'.format(id), existing_ocr=existing_ocr)
         if result is None:
             continue
         syl_boxes, image, lines_peak_locs, all_chars = result
