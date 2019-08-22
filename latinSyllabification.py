@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import re
 
-consonant_groups = ['qu', 'ch', 'ph', 'fl', 'fr', 'st', 'br', 'cr', 'cl', 'pr', 'tr', 'ct', 'th']
+consonant_groups = ['qu', 'ch', 'ph', 'fl', 'fr', 'st', 'br', 'cr', 'cl', 'pr', 'tr', 'ct', 'th', 'sp']
 diphthongs = ['ae', 'au', 'ei', 'oe', 'ui', 'ya', 'ex', 'ix']
 vowels = ['a', 'e', 'i', 'o', 'u', 'y']
 
@@ -25,7 +25,7 @@ def syllabify_word(inp):
     to adjacent seeds. first make every vowel stick to its preceding consonant group. any remaining
     consonant groups stick to the vowel behind them.
     '''
-
+    #
     if len(inp) <= 1:
         return inp
     if inp == 'euouae':
@@ -34,6 +34,12 @@ def syllabify_word(inp):
         return 'cu-ius'.split('-')
     if inp == 'eius':
         return 'e-ius'.split('-')
+    if inp == 'iugum':
+        return 'iu-gum'.split('-')
+    if inp == 'iustum':
+        return 'iu-stum'.split('-')
+    if inp == 'iusticiam':
+        return 'iu-sti-ci-am'.split('-')
     word = [inp]
 
     for unit in consonant_groups + diphthongs:
@@ -117,6 +123,6 @@ def syllabify_text(input):
 
 
 if __name__ == "__main__":
-    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus  s'
+    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus s'
     res = syllabify_text(inp)
     print(res)

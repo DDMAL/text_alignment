@@ -21,7 +21,6 @@ def combine_transcripts(standard, ms):
 
     ms = ms.replace('ihe', 'ie')
 
-    
     if not standard:
         return ms
 
@@ -134,3 +133,4 @@ if __name__ == '__main__':
     print(transcript)
     transcript = text_func('142v')
     print(transcript)
+    text_func = filename_to_text_func('./csv/stgall388_123750.csv')

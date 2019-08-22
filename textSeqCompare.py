@@ -173,7 +173,7 @@ def perform_alignment(transcript, ocr, scoring_system=None, verbose=False):
             line = '{} {} {}'
             print(line.format(tra_align[n], ocr_align[n], align_record[n]))
 
-    return(tra_align, ocr_align)
+    return tra_align, ocr_align, mat[-1][-1]
 
 
 if __name__ == '__main__':
@@ -184,7 +184,7 @@ if __name__ == '__main__':
     seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
     seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
 
-    a, b = perform_alignment(seq1, seq2, scoring_system=[10, -5, -7, -7])
+    a, b, score = perform_alignment(seq1, seq2, scoring_system=[10, -5, -7, -7])
     print('|'.join(a))
     print('|'.join(b))
 
