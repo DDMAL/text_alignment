@@ -6,7 +6,9 @@ import json
 import numpy as np
 import textAlignPreprocessing as preproc
 import gamera.core as gc
+import os
 import parse_cantus_csv as pcc
+import textSeqCompare as tsc
 import alignToOCR as atocr
 from itertools import product
 reload(atocr)
@@ -174,6 +176,29 @@ def try_params(params):
 
     return np.mean(results)
 
+
+def test_ocropus_model(path, seq_align_params=[0, -1, -1, -1]):
+    pairs = []
+    # path = '/Users/tim/Documents/ocropy-training/all'
+    path = '/Users/tim/Documents/ocropy-training/gall2'
+    for dir, folders, files in os.walk(path):
+        for file in files:
+            if not file.split('.')[-2] == 'gt':
+                continue
+            with open('{}/{}'.format(dir, file)) as f:
+                gt = f.read()
+            ocr_fname = file.split('.')[0] + '.txt'
+            with open('{}/{}'.format(dir, ocr_fname)) as f:
+                ocr = f.read()
+            pairs.append((gt, ocr))
+
+    scores = []
+    for gt, ocr in pairs:
+        _, _, score = tsc.perform_alignment(list(gt), list(ocr), seq_align_params)
+        scores.append(score)
+    final_score = sum(scores) / sum(len(x[0]) for x in pairs)
+
+    return final_score
 
 if __name__ == '__main__':
     logs = {}

@@ -184,7 +184,7 @@ if __name__ == '__main__':
     seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
     seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
 
-    a, b, score = perform_alignment(seq1, seq2, scoring_system=[10, -5, -7, -7])
+    a, b, score = perform_alignment(seq1, seq2, scoring_system=[1, -1, -1, -1])
     print('|'.join(a))
     print('|'.join(b))
 
