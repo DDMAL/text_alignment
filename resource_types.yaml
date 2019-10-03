@@ -9,4 +9,4 @@
   extension: txt
 - mimetype: application/pyrnn
   description: OCR model trained by OCRopus
-  extention: pyrnn
+  extension: pyrnn
