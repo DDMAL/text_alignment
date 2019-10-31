@@ -7,6 +7,6 @@
 - mimetype: text/plain
   description: Plain text
   extension: txt
-- mimetype: application/pyrnn
+- mimetype: application/ocropus+pyrnn
   description: OCR model trained by OCRopus
   extension: pyrnn

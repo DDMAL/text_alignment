@@ -41,7 +41,7 @@ class text_alignment(RodanTask):
         'is_list': False
     }, {
         'name': 'OCR Model',
-        'resource_types': ['application/pyrnn'],
+        'resource_types': ['application/ocropus+pyrnn'],
         'minimum': 1,
         'maximum': 1,
         'is_list': False
