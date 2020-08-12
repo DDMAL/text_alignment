@@ -122,15 +122,15 @@ def filename_to_text_func(transcript_path, mapping_path=None):
 
         # to handle salzinnes, as a quick hack.
         fname = fname.replace('CF-', '')
-        return fname, clean(text)
+        return fname, text
 
     return folio_to_text
 
 
 if __name__ == '__main__':
     text_func = filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
-    transcript = text_func(55)
-    print(transcript)
-    transcript = text_func('142v')
-    print(transcript)
-    text_func = filename_to_text_func('./csv/stgall388_123750.csv')
+    # for n in range(1, 464):
+    #     fname, transcript = text_func(n)
+    #     fname = './salzinnes_transcripts/CF-{}.txt'.format(fname)
+    #     with open(fname, 'w') as f:
+    #         f.write(transcript)
