@@ -10,6 +10,7 @@ import shutil
 import numpy as np
 import textSeqCompare as tsc
 import latinSyllabification as latsyl
+import parse_cantus_csv as pcc
 import subprocess
 import json
 import re
@@ -19,6 +20,7 @@ import tempfile
 reload(preproc)
 reload(tsc)
 reload(latsyl)
+reload(pcc)
 
 parallel = 2
 median_line_mult = 2
@@ -249,6 +251,10 @@ def process(raw_image,
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
+
+    # for now, force transcript to be lowercase and remove characters:
+    transcript = pcc.clean(transcript)
+
     print('performing alignment...')
     tra_align, ocr_align, _ = tsc.perform_alignment(list(transcript), list(ocr),
         scoring_system=seq_align_params, verbose=False)
@@ -344,6 +350,7 @@ def draw_results_on_page(image, syl_boxes, lines_peak_locs):
 
         ul = cbox.ul
         lr = cbox.lr
+        draw.rectangle([ul[0], ul[1] - text_size, ul[0] + text_size * len(cbox.char) * 0.6, ul[1]], fill='white')
         draw.text((ul[0], ul[1] - text_size), cbox.char, font=fnt, fill='black')
         draw.rectangle([ul, lr], outline='black')
         draw.line([ul[0], ul[1], ul[0], lr[1]], fill='black', width=5)
@@ -365,15 +372,15 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     import os
 
-    # text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
-    # manuscript = 'salzinnes'
-    # f_inds = range(80, 121)
-    # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
-
-    text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
-    manuscript = 'einsiedeln'
-    f_inds = range(1, 6)
+    text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
+    manuscript = 'salzinnes'
+    f_inds = ['002v']
     ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
+
+    # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
+    # manuscript = 'einsiedeln'
+    # f_inds = range(0, 11)
+    # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 
     # text_func = pcc.filename_to_text_func('./csv/stgall390_123717.csv')
     # manuscript = 'stgall390'
@@ -382,7 +389,7 @@ if __name__ == '__main__':
 
     # text_func = pcc.filename_to_text_func('./csv/stgall388_123750.csv')
     # manuscript = 'stgall388'
-    # f_inds = ['033']
+    # f_inds = ['028', '029', '030', '031', '032']
     # ocropus_model = 'stgall3-00017000.pyrnn.gz'
 
     for ind in f_inds:
@@ -395,7 +402,7 @@ if __name__ == '__main__':
             continue
 
         fname = '{}_{}'.format(manuscript, fname)
-        ocr_pickle = './pik/{}_boxes.pickle'.format(fname)
+        ocr_pickle = None #  './pik/{}_boxes.pickle'.format(fname)
         text_layer_fname = './png/{}_text.png'.format(fname)
 
         if not os.path.isfile(text_layer_fname):
@@ -418,7 +425,7 @@ if __name__ == '__main__':
 
         id = hex(np.random.randint(2**32))
         result = process(raw_image, transcript, ocropus_model,
-            wkdir_name='ocr_{}'.format(id), existing_ocr=existing_ocr)
+            wkdir_name='ocr_{}'.format(id), existing_ocr=existing_ocr, verbose=True)
         if result is None:
             continue
         syl_boxes, image, lines_peak_locs, all_chars = result
