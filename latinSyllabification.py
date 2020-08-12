@@ -10,6 +10,7 @@ abbreviations = {
     u'dūs': ['do', 'mi', 'nus'],
     u'dne': ['do', 'mi', 'ne'],
     u'alla': ['al', 'le', 'lu', 'ia'],
+    u'xpc': ['xp', 'ic', 'tuc'],
     u'^': ['us'],
     u'ā': ['am'],
     u'ē': ['em'],
@@ -18,7 +19,7 @@ abbreviations = {
 }
 
 
-def syllabify_word(inp):
+def syllabify_word(inp, verbose=False):
     '''
     separate each word into UNITS - first isolate consonant groups, then diphthongs, then letters.
     each vowel / diphthong unit is a "seed" of a syllable; consonants and consonant groups "stick"
@@ -26,6 +27,13 @@ def syllabify_word(inp):
     consonant groups stick to the vowel behind them.
     '''
     #
+
+    # remove all whitespace and newlines from input:
+    inp = re.sub(r'[\s+]', '', inp)
+
+    if verbose:
+        print('syllabifying {}'.format(inp))
+
     if len(inp) <= 1:
         return inp
     if inp == 'euouae':
@@ -40,17 +48,29 @@ def syllabify_word(inp):
         return 'iu-stum'.split('-')
     if inp == 'iusticiam':
         return 'iu-sti-ci-am'.split('-')
+    if inp == 'iohannes':
+        return 'io-han-nes'.split('-')
     word = [inp]
 
+    # for each unbreakable unit (consonant_groups and dipthongs)
     for unit in consonant_groups + diphthongs:
         new_word = []
+
+        # check each segment of the word for this unit
         for segment in word:
-            if '*' in segment:
+
+            # if this segment is marked as unbreakable or does not have the unit we care about,
+            # just add the segment back into new_word and continue
+            if '*' in segment or unit not in segment:
                 new_word.append(segment)
                 continue
 
+            # otherwise, we have to split this segment and then interleave the unit with the rest
+            # this 'reconstructs' the original word even in cases where the unit appears more than
+            # once
             split = segment.split(unit)
 
+            # necessary in case there exists more than one example of a unit
             rep_list = [unit + '*'] * len(split)
             interleaved = [val for pair in zip(split, rep_list) for val in pair]
 
@@ -65,6 +85,7 @@ def syllabify_word(inp):
         if '*' in segment:
             new_word.append(segment.replace('*', ''))
             continue
+        # if not an unbreakable segment, then separate it into characters
         new_word += list(segment)
     word = list(new_word)
 
@@ -73,8 +94,12 @@ def syllabify_word(inp):
         if word[i] in vowels + diphthongs:
             word[i] = word[i] + '*'
 
-    # begin merging units together.
-    while not all(('*' in x) for x in word):
+    if verbose:
+        print('split list: {}'.format(word))
+
+    # begin merging units together until all units are marked with a *.
+    escape_counter = 0
+    while not all([('*' in x) for x in word]):
 
         # first stick consonants / consonant groups to syllables ahead of them
         new_word = []
@@ -110,19 +135,33 @@ def syllabify_word(inp):
                 i += 1
         word = list(new_word)
 
+        if verbose:
+            print(word, [('*' in x) for x in word])
+
     word = [x.replace('*', '') for x in new_word]
+
+    escape_counter += 1
+    if escape_counter > 1000:
+        raise RuntimeError('input to syllabification script has created an infinite loop')
 
     return word
 
 
-def syllabify_text(input):
+def syllabify_text(input, verbose=False):
     words = input.split(' ')
-    word_syls = [syllabify_word(w) for w in words]
+    word_syls = [syllabify_word(w, verbose) for w in words]
     syls = [item for sublist in word_syls for item in sublist]
     return syls
 
 
 if __name__ == "__main__":
-    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus s'
-    res = syllabify_text(inp)
+    fpath = "/Users/tim/Desktop/002v_transcript.txt"
+    with open(fpath) as f:
+        ss = ' '.join(f.readlines())
+
+    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus s jfghjfgh'
+    res = syllabify_text(inp, True)
     print(res)
+
+    # res = syllabify_text(ss, True)
+    # print(res)
