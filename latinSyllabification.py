@@ -31,6 +31,10 @@ def syllabify_word(inp, verbose=False):
     # remove all whitespace and newlines from input:
     inp = re.sub(r'[\s+]', '', inp)
 
+    # convert to lowercase. it would be possible to maintain letter case if we saved the original
+    # input and then re-split it at the very end of this method, if that's desirable
+    inp = str.lower(inp)
+
     if verbose:
         print('syllabifying {}'.format(inp))
 
@@ -97,6 +101,9 @@ def syllabify_word(inp, verbose=False):
     if verbose:
         print('split list: {}'.format(word))
 
+    if not any(('*' in x) for x in word):
+        return [''.join(word)]
+
     # begin merging units together until all units are marked with a *.
     escape_counter = 0
     while not all([('*' in x) for x in word]):
@@ -136,13 +143,13 @@ def syllabify_word(inp, verbose=False):
         word = list(new_word)
 
         if verbose:
-            print(word, [('*' in x) for x in word])
+            print('merging into syls:{}'.format(word))
+
+        escape_counter += 1
+        if escape_counter > 100:
+            raise RuntimeError('input to syllabification script has created an infinite loop')
 
     word = [x.replace('*', '') for x in new_word]
-
-    escape_counter += 1
-    if escape_counter > 1000:
-        raise RuntimeError('input to syllabification script has created an infinite loop')
 
     return word
 
@@ -155,13 +162,12 @@ def syllabify_text(input, verbose=False):
 
 
 if __name__ == "__main__":
-    fpath = "/Users/tim/Desktop/002v_transcript.txt"
-    with open(fpath) as f:
-        ss = ' '.join(f.readlines())
-
-    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus s jfghjfgh'
-    res = syllabify_text(inp, True)
-    print(res)
-
+    # fpath = "/Users/tim/Desktop/002v_transcript.txt"
+    # with open(fpath) as f:
+    #     ss = ' '.join(f.readlines())
     # res = syllabify_text(ss, True)
     # print(res)
+
+    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus Es En xcvbnmzxcbvnm'
+    res = syllabify_text(inp, True)
+    print(res)
