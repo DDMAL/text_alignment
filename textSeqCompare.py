@@ -1,5 +1,6 @@
 import numpy as np
 from unidecode import unidecode
+from functools import partial
 
 # scoring system
 default_match = 10
@@ -9,36 +10,46 @@ gap_extend = -1
 default_sys = [8, -4, -7, -7, -3, 0]
 
 
-def perform_alignment(transcript, ocr, scoring_system=None, verbose=False):
+def perform_alignment(transcript, ocr, match_function=None, gap_penalties=None, ignore_case=True, verbose=False):
     '''
+    @match_function must be a function that takes in two strings and returns a single integer:
+        a positive integer for a "match," a negative integer for a "mismatch."
+
     @scoring_system must be array-like, of one of the following forms:
-    [match_func(a,b), gap_open_x, gap_open_y, gap_extend_x, gap_extend_y]
-    [match, mismatch, gap_open_x, gap_open_y, gap_extend_x, gap_extend_y]
-    [match, mismatch, gap_open, gap_extend]
+        [gap_open_x, gap_open_y, gap_extend_x, gap_extend_y]
+        [gap_open, gap_extend]
+
+    @ignore_case ensures that the default scoring method will treat uppercase and lowercase letters
+        the same, by applying lower() before every comparison. this setting will be ignored if a
+        callable function is passed into match_function.
     '''
+
+    def default_score_method(a, b, weights, ignore_case):
+        if ignore_case:
+            a = str.lower(a)
+            b = str.lower(b)
+        return weights[0] if a == b else weights[1]
+
+    if match_function is None:
+        weights = [1, -1]
+        scoring_method = partial(default_score_method, weights=weights, ignore_case=ignore_case)
+    elif type(match_function) is list:
+        scoring_method = partial(default_score_method, weights=match_function, ignore_case=ignore_case)
+    elif callable(match_function):
+        scoring_method = match_function
+    else:
+        raise ValueError('gap_penalties argument {} invalid: must either be a list of 2 elements or a callable function that takes two elements'.format(match_function))
+
+    if len(gap_penalties) == 4:
+        gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = gap_penalties
+    elif len(gap_penalties) == 2:
+        gap_open_x, gap_open_y = (gap_penalties[0], gap_penalties[0])
+        gap_extend_x, gap_extend_y = (gap_penalties[1], gap_penalties[1])
+    else:
+        raise ValueError('gap_penalties argument {} invalid: must be a list of either 4 or 2 elements'.format(gap_penalties))
 
     transcript = transcript + [' ']
     ocr = ocr + [' ']
-
-    if scoring_system is None:
-        scoring_system = default_sys
-
-    if len(scoring_system) == 5 and callable(scoring_system[0]):
-        scoring_method = scoring_system[0]
-        gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = scoring_system[-4:]
-    elif len(scoring_system) == 6:
-        def default_score_method(a, b):
-            return scoring_system[0] if a == b else scoring_system[1]
-        scoring_method = default_score_method
-        gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = scoring_system[-4:]
-    elif len(scoring_system) == 4:
-        def default_score_method(a, b):
-            return scoring_system[0] if a == b else scoring_system[1]
-        scoring_method = default_score_method
-        gap_open_x, gap_open_y = (scoring_system[2], scoring_system[2])
-        gap_extend_x, gap_extend_y = (scoring_system[3], scoring_system[3])
-    else:
-        raise ValueError('scoring_system {} invalid'.format(scoring_system))
 
     # y_mat and x_mat keep track of gaps in horizontal and vertical directions
     mat = np.zeros((len(transcript), len(ocr)))
@@ -179,7 +190,9 @@ def perform_alignment(transcript, ocr, scoring_system=None, verbose=False):
 if __name__ == '__main__':
 
     seq1 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit '
-    seq2 = 'LoLO LOrem ipsum fipsudolor ..... sit eamet, c.nnr adizisdcing eelitellit'
+    seq2 = str.upper('LoLO LOrem ipsum fipsudolor ..... sit eamet, c.nnr adizisdcing eelitellit')
+    match_weights = [3, -4]
+    gap_penalties = [-2, -2, -1, -1]
 
     # seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
     # seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
@@ -187,7 +200,7 @@ if __name__ == '__main__':
     seq1 = list(seq1)
     seq2 = list(seq2)
 
-    a, b, score = perform_alignment(seq1, seq2)
+    a, b, score = perform_alignment(seq1, seq2, match_weights, gap_penalties, ignore_case=True)
 
     sa = ''
     sb = ''
