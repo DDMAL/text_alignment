@@ -1,6 +1,6 @@
 # text-alignment
 
-Given an image of the text layer of a chant manuscript, and a transcript of text that lies entirely within that manuscript, finds the position of each syllable of that text on the page.
+Given an image of the text layer of a chant manuscript, and a transcript of text that lies entirely within that manuscript, finds the position of each syllable of that text on the page. **NOTE: The syllabification process included in this presently only works on latin text. It has been tested on chants from the Salzinnes Antiphonal (16th century), Einsiedeln 611 (14th century), St. Gallen 388 (12th century), and St. Gallen 390, 391 (10th century).**
 
 ### Installation
 
