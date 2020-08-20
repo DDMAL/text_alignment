@@ -18,6 +18,7 @@ ocropy-master/*
 pik/*
 ground-truth-alignments/*
 csv/*
+ocr*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

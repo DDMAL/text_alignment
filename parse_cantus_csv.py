@@ -9,7 +9,7 @@ def clean(text):
     # change all runs of consecutive spaces to single spaces
     text = re.sub(r" +", " ", text)
     # convert to lowercase
-    text = text.lower()
+    # text = text.lower()
     return text
 
 
