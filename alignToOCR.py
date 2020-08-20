@@ -252,7 +252,7 @@ def process(raw_image,
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
 
-    # for now, force transcript to be lowercase and remove characters:
+    # remove special characters, but maintain case
     transcript = pcc.clean(transcript)
 
     print('performing alignment...')
