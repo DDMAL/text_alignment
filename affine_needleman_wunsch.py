@@ -2,12 +2,11 @@ import numpy as np
 from unidecode import unidecode
 from functools import partial
 
-# scoring system
-default_match = 10
-default_mismatch = -5
-gap_open = -10
-gap_extend = -1
-default_sys = [8, -4, -7, -7, -3, 0]
+# scoring system; these were the optimal weights found by grid search. different scoring methods
+# tend to barely make any impact on the actual aligned output, however, since things are
+# aggregated by syllable, so don't worry about tweaking this too much.
+default_match_weights = [8, -5]
+default_gap_penalties = [-7, -7, -3, 0]
 
 
 def perform_alignment(transcript, ocr, match_function=None, gap_penalties=None, ignore_case=True, verbose=False):
@@ -26,12 +25,12 @@ def perform_alignment(transcript, ocr, match_function=None, gap_penalties=None, 
 
     def default_score_method(a, b, weights, ignore_case):
         if ignore_case:
-            a = str.lower(a)
-            b = str.lower(b)
+            a = a.lower()
+            b = b.lower()
         return weights[0] if a == b else weights[1]
 
     if match_function is None:
-        weights = [1, -1]
+        weights = default_match_weights
         scoring_method = partial(default_score_method, weights=weights, ignore_case=ignore_case)
     elif type(match_function) is list:
         scoring_method = partial(default_score_method, weights=match_function, ignore_case=ignore_case)
@@ -40,7 +39,9 @@ def perform_alignment(transcript, ocr, match_function=None, gap_penalties=None, 
     else:
         raise ValueError('gap_penalties argument {} invalid: must either be a list of 2 elements or a callable function that takes two elements'.format(match_function))
 
-    if len(gap_penalties) == 4:
+    if gap_penalties is None:
+        gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = default_gap_penalties
+    elif len(gap_penalties) == 4:
         gap_open_x, gap_open_y, gap_extend_x, gap_extend_y = gap_penalties
     elif len(gap_penalties) == 2:
         gap_open_x, gap_open_y = (gap_penalties[0], gap_penalties[0])
@@ -61,12 +62,12 @@ def perform_alignment(transcript, ocr, match_function=None, gap_penalties=None, 
 
     # establish boundary conditions
     for i in range(len(transcript)):
-        mat[i][0] = gap_extend * i
+        mat[i][0] = gap_extend_x * i
         x_mat[i][0] = -1e100
-        y_mat[i][0] = gap_extend * i
+        y_mat[i][0] = gap_extend_x * i
     for j in range(len(ocr)):
-        mat[0][j] = gap_extend * j
-        x_mat[0][j] = gap_extend * j
+        mat[0][j] = gap_extend_y * j
+        x_mat[0][j] = gap_extend_y * j
         y_mat[0][j] = -1e100
 
     for i in range(1, len(transcript)):

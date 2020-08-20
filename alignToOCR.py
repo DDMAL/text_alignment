@@ -8,7 +8,7 @@ import textAlignPreprocessing as preproc
 import os
 import shutil
 import numpy as np
-import textSeqCompare as tsc
+import affine_needleman_wunsch as afw
 import latinSyllabification as latsyl
 import parse_cantus_csv as pcc
 import subprocess
@@ -18,7 +18,7 @@ import io
 import tempfile
 
 reload(preproc)
-reload(tsc)
+reload(afw)
 reload(latsyl)
 reload(pcc)
 
@@ -186,7 +186,7 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=para
 def process(raw_image,
             transcript,
             ocropus_model,
-            seq_align_params=None,
+            seq_align_params={},
             wkdir_name='wkdir_ocropy',
             parallel=parallel,
             median_line_mult=median_line_mult,
@@ -256,8 +256,11 @@ def process(raw_image,
     transcript = pcc.clean(transcript)
 
     print('performing alignment...')
-    tra_align, ocr_align, _ = tsc.perform_alignment(list(transcript), list(ocr),
-        scoring_system=seq_align_params, verbose=False)
+    tra_align, ocr_align, _ = afw.perform_alignment(
+        transcript=list(transcript),
+        ocr=list(ocr),
+        **seq_align_params
+        )
     tra_align = ''.join(tra_align)
     ocr_align = ''.join(ocr_align)
 
@@ -374,7 +377,7 @@ if __name__ == '__main__':
 
     text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     manuscript = 'salzinnes'
-    f_inds = ['002v']
+    f_inds = ['002v', '003v', '040r']
     ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
