@@ -179,14 +179,26 @@ def perform_alignment(transcript, ocr, scoring_system=None, verbose=False):
 if __name__ == '__main__':
 
     seq1 = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit '
-    seq2 = 'LoLorem fipsudolor ..... sit eamet, c.nnr adizisdcing eelitellit'
+    seq2 = 'LoLO LOrem ipsum fipsudolor ..... sit eamet, c.nnr adizisdcing eelitellit'
 
-    seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
-    seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
+    # seq1 = [seq1[2*x] + seq1[2*x + 1] for x in range(len(seq1) // 2)]
+    # seq2 = [seq2[2*x] + seq2[2*x + 1] for x in range(len(seq2) // 2)]
 
-    a, b, score = perform_alignment(seq1, seq2, scoring_system=[1, -1, -1, -1])
-    print('|'.join(a))
-    print('|'.join(b))
+    seq1 = list(seq1)
+    seq2 = list(seq2)
+
+    a, b, score = perform_alignment(seq1, seq2)
+
+    sa = ''
+    sb = ''
+
+    for n in range(len(a)):
+        spacing = str(max(len(a[n]), len(b[n])))
+        sa += ('{:' + spacing + 's}').format(a[n])
+        sb += ('{:' + spacing + 's}').format(b[n])
+
+    print(sa)
+    print(sb)
 
     # import parse_salzinnes_csv as psc
     # reload(psc)
