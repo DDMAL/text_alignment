@@ -292,7 +292,7 @@ def process(raw_image,
         else:
             syl_regex = syl[0] + syl[1:-1].replace('', '_*') + syl[-1]
 
-        syl_match = re.search(syl_regex, tra_align[current_offset:])
+        syl_match = re.search(syl_regex, tra_align[current_offset:], re.IGNORECASE)
         start = syl_match.start() + current_offset
         end = syl_match.end() + current_offset
         current_offset = end

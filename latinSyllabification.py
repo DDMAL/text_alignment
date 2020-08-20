@@ -5,6 +5,11 @@ consonant_groups = ['qu', 'ch', 'ph', 'fl', 'fr', 'st', 'br', 'cr', 'cl', 'pr', 
 diphthongs = ['ae', 'au', 'ei', 'oe', 'ui', 'ya', 'ex', 'ix']
 vowels = ['a', 'e', 'i', 'o', 'u', 'y']
 
+# add uppercase variants of every single symbol.
+consonant_groups += [x[0].upper() + x[1:] for x in consonant_groups]
+diphthongs += [x[0].upper() + x[1:] for x in diphthongs]
+vowels += [x[0].upper() + x[1:] for x in vowels]
+
 abbreviations = {
     u'dns': ['do', 'mi', 'nus'],
     u'dūs': ['do', 'mi', 'nus'],
@@ -33,26 +38,25 @@ def syllabify_word(inp, verbose=False):
 
     # convert to lowercase. it would be possible to maintain letter case if we saved the original
     # input and then re-split it at the very end of this method, if that's desirable
-    inp = str.lower(inp)
 
     if verbose:
         print('syllabifying {}'.format(inp))
 
     if len(inp) <= 1:
         return inp
-    if inp == 'euouae':
+    if inp.lower() == 'euouae':
         return 'e-u-o-u-ae'.split('-')
-    if inp == 'cuius':
+    if inp.lower() == 'cuius':
         return 'cu-ius'.split('-')
-    if inp == 'eius':
+    if inp.lower() == 'eius':
         return 'e-ius'.split('-')
-    if inp == 'iugum':
+    if inp.lower() == 'iugum':
         return 'iu-gum'.split('-')
-    if inp == 'iustum':
+    if inp.lower() == 'iustum':
         return 'iu-stum'.split('-')
-    if inp == 'iusticiam':
+    if inp.lower() == 'iusticiam':
         return 'iu-sti-ci-am'.split('-')
-    if inp == 'iohannes':
+    if inp.lower() == 'iohannes':
         return 'io-han-nes'.split('-')
     word = [inp]
 
@@ -168,6 +172,14 @@ if __name__ == "__main__":
     # res = syllabify_text(ss, True)
     # print(res)
 
-    inp = 'quaecumque ejus michi antiphonum assistens alleluya dixit extra exhibeamus Es En xcvbnmzxcbvnm'
+    inp = 'Quique terrigene et filii hominum simul in unum dives et pauper Ite ' \
+          'Qui regis israel intende qui deducis velut ovem ioseph qui sedes super cherubin Nuncia ' \
+          'Excita domine potentiam tuam et veni ut salvos facias nos Qui regnaturus ' \
+          'Aspiciens ' \
+          'Aspiciebam in visu noctis et ecce in nubibus celi ' \
+          'filius hominis venit Et datum est ei regnum et honor et ' \
+          'omnis populus tribus et lingue servient ei ' \
+          'zxcvbnm zx cvbnmzxcv bnm ' \
+          'aaaaa413aa a$a %aa'
     res = syllabify_text(inp, True)
     print(res)
