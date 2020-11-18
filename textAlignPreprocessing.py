@@ -195,7 +195,7 @@ def preprocess_images(input_image, despeckle_amt=despeckle_amt, filter_runs=1, f
     return image_bin, image_eroded, angle
 
 
-def identify_text_lines(image_bin, image_eroded):
+def identify_text_lines_old(image_bin, image_eroded):
     '''
     finds text lines on preprocessed image. step-by-step:
     1. find peak locations of vertical projection
@@ -283,141 +283,53 @@ def identify_text_lines(image_bin, image_eroded):
     return line_strips, peak_locations, smoothed_projection
 
 
-def smear_lines(image, points_factor=0.005):
-    filt = image.image_copy()
-    print('connected component analysis...')
-    components = filt.cc_analysis()
+def identify_text_lines(image_eroded):
+    '''
+    finds text lines on preprocessed image. step-by-step:
+    1. find peak locations of vertical projection
+    2. draw horizontal white lines between peak locations to make totally sure that lines are
+        unconnected (ornamental letters can often touch the line above them)
+    3. connected component analysis
+    4. break into neat rows of connected components that each intersect the same horizontal line
+    '''
 
-    for c in components:
-        if c.black_area()[0] < noise_area_thresh:
-            c.fill_white()
-    med_comp_width = int(np.median([c.ncols for c in components
-        if c.black_area()[0] > noise_area_thresh]))
-    med_comp_height = int(np.median([c.nrows for c in components
-        if c.black_area()[0] > noise_area_thresh]))
+    # compute y-axis projection of input image and filter with sliding window average
+    project = np.clip(255 - image_eroded, 0, 1).sum(1)
+    smoothed_projection = moving_avg_filter(project, filter_size)
 
-    filt.reset_onebit_image()
+    # calculate normalized log prominence of all peaks in projection
+    peak_locations = find_peak_locations(smoothed_projection)
 
-    filt.filter_narrow_runs(med_comp_width * 2, 'white')
-    filt.filter_narrow_runs(med_comp_width * 2, 'black')
-    # filt.filter_narrow_runs(med_comp_width * 2, 'white')
-    # filt.filter_narrow_runs(med_comp_width * 2, 'black')
+    # draw a horizontal white line at the local minima of the vertical projection. this ensures
+    # that every connected component can intersect at most one text line.
+    for i in range(len(peak_locations) - 1):
+        start = peak_locations[i]
+        end = peak_locations[i + 1]
+        idx = np.argmin(smoothed_projection[start:end])
+        idx += start
+        image_eroded[idx, :] = 255
 
-    # gamera crashes when calculating a convex hull on very skinny ccs, so as a workaround
-    # just get rid of them altogether at the outset
-    # filt.filter_short_runs(med_comp_height // 8, 'black')
-    # filt.filter_short_runs(med_comp_height // 8, 'white')
+    # perform connected component analysis
+    num_labels, labels = cv.connectedComponents(255 - image_eroded)
 
-    smear = filt.cc_analysis()
+    # c = Counter(labels.reshape(-1))
+    # for k in c.keys():
+    #     if c[k] < noise_area_thresh:
+    #         labels[labels == k] = 0
 
-    # remove smeared rows that are too short
-    med_smear_height = np.median([c.nrows for c in smear])
-    smear = [s for s in smear if s.nrows >= med_smear_height / 2]
-    overlap_thresh = int(med_smear_height / 2)
+    line_strips = []
+    cc_lines = []
+    for line_loc in peak_locations:
 
-    g = graph.Graph(graph.FLAG_DAG)
-    for a, b in iter.product(smear, smear):
-        # ensure that a is to the left of b on the page
-        if a.lr_x > b.ul_x:
-            continue
-        # ensure that their midpoints are less than a line width apart
-        # if abs((a.lr_y + a.ul_y) - (b.lr_y + b.ul_y)) > 2 * med_smear_height:
-        #     continue
-        # ensure that a horizontally overlaps b
-        overlap_amt = min(a.lr_y - b.ul_y, b.ll_y - a.ur_y)
-        # print(overlap_amt)
-        if overlap_amt < overlap_thresh:
-            continue
-        left_mid = np.array([a.lr_x + a.ul_x, a.lr_y + a.ur_y]) / 2
-        right_mid = np.array([b.lr_x + b.ul_x, b.ll_y + b.ul_y]) / 2
-        val = np.linalg.norm(left_mid - right_mid)
-        g.add_edge(a, b, val, True)
-        # filt.draw_line(left_mid, right_mid, 1, 10)
+        # get all components that intersect this horizontal projection peak location
+        int_components = list(set(labels[line_loc, :]))
+        int_components.remove(0)
 
-    # want to get to a point where every node has either 1 or 0 edges set to True
-    for n in g.get_nodes():
+        int_labels = np.isin(labels, int_components).astype('uint8')
+        strip_bounds = cv.boundingRect(int_labels)
+        line_strips.append(strip_bounds)
 
-        in_edges = [x for x in g.get_edges() if x.to_node == n]
-        trues = [x.label for x in in_edges]
-        if sum(trues) > 1:
-            for x in in_edges:
-                x.label = False
-            choose = min(in_edges, key=lambda x: x.cost)
-            choose.label = True
-
-        out_edges = [x for x in n.edges]
-        trues = [x.label for x in out_edges]
-        if sum(trues) > 1:
-            for x in out_edges:
-                x.label = False
-            choose = min(out_edges, key=lambda x: x.cost)
-            choose.label = True
-
-    for e in g.get_edges():
-        if not e.label:
-            continue
-        a = e.from_node.data
-        b = e.to_node.data
-        left_mid = np.array([a.lr_x + a.ul_x, a.lr_y + a.ur_y]) / 2
-        right_mid = np.array([b.lr_x + b.ul_x, b.ll_y + b.ul_y]) / 2
-        filt.draw_line(left_mid, right_mid, 1, 10)
-
-    filt.reset_onebit_image()
-    hulls = filt.image_copy()
-    hulls.fill_white()
-    smear = filt.cc_analysis()
-    # for s in smear:
-    #     points = s.convex_hull_as_points()
-    #     for i in range(len(points)):
-    #         hulls.draw_line(points[i-1] + s.ul, points[i] + s.ul, 1, 1)
-
-    filt_color = filt.graph_color_ccs(smear, colors, 1)
-
-    imp = image.to_rgb().to_numpy().astype('float')
-    flp = filt_color.to_rgb().to_numpy().astype('float')
-    add = (imp + flp) / 2
-    comb = Image.fromarray(add.astype('uint8'))
-    # comb.show()
-    return comb
-
-
-def strip_projections(image, num_strips=30):
-
-    newimg = image.image_copy()
-
-    bottom_contour = image.contour_bottom()
-    left_side = min([i for i in range(len(bottom_contour) - 1)
-        if bottom_contour[i + 1] != np.inf
-        and bottom_contour[i] == np.inf])
-    right_side = max([i for i in range(len(bottom_contour) - 1)
-        if bottom_contour[i + 1] == np.inf
-        and bottom_contour[i] != np.inf])
-
-    vert_strips = []
-    strip_dim = gc.Dim(1 + (right_side - left_side) // num_strips, image.height)
-    for i in range(num_strips):
-        ul = gc.Point(left_side + strip_dim.ncols * i, 0)
-        subimg = image.subimage(ul, strip_dim)
-        vert_strips.append(subimg)
-
-    strip_centers = [int((x + 0.5) * strip_dim.ncols + left_side) for x in range(num_strips)]
-    strip_projections = [x.projection_rows() for x in vert_strips]
-    strip_proj_smooth = [moving_avg_filter(x) for x in strip_projections]
-    strip_log = [np.log(x / (max(x) + 1) + 1) for x in strip_proj_smooth]
-    anchor_points = []
-    # find runs of consecutive zeroes and take points in middle of these runs: anchors
-    for s in strip_log:
-        iszero = np.concatenate(([0], np.less(s, 0.2).view(np.int8), [0]))
-        absdiff = np.abs(np.diff(iszero))
-        ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
-        anchors = [int((x[0] + x[1]) / 2) for x in ranges]
-        anchor_points.append(anchors)
-
-    for i, x in enumerate(strip_centers):
-        for y in anchor_points[i]:
-            newimg.draw_marker(gc.Point(x, y), 10, 3, 1)
-
-    newimg.to_rgb().to_pil().save('aaaaaaa.png')
+    return line_strips, peak_locations, smoothed_projection
 
 
 def save_preproc_image(image, cc_strips, lines_peak_locs, fname):
@@ -448,14 +360,31 @@ def save_preproc_image(image, cc_strips, lines_peak_locs, fname):
 
 if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
+    from matplotlib import pyplot as plt
+    import numpy as np
+    import cv2 as cv
 
-    fnames = ['stgall390_023']
+    fnames = ['salzinnes_378']
 
     for fname in fnames:
-        print('processing {}...'.format(fname))
-        raw_image = gc.load_image('./png/' + fname + '_text.png')
-        image, eroded, angle = preprocess_images(raw_image)
-        line_strips, lines_peak_locs, proj = identify_text_lines(image, eroded)
+        print(f'processing {fname}...')
+        raw_image = cv.imread(f'./png/{fname}_text.png')
+
+        gray_img = cv.cvtColor(raw_image, cv.COLOR_BGR2GRAY)
+
+        blur = cv.GaussianBlur(gray_img, (5, 5), 0)
+        ret3, th3 = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+
+        kernel = np.ones((3, 3), np.uint8)
+        cl = cv.morphologyEx(th3, cv.MORPH_CLOSE, kernel)
+        eroded = cv.morphologyEx(cl, cv.MORPH_OPEN, kernel)
+
+        cv.imwrite('test.png', eroded)
+        line_strips, lines_peak_locs, proj = identify_text_lines(eroded)
+
+
+
+        #
 
         # save_preproc_image(image, line_strips, lines_peak_locs, fname)
 
