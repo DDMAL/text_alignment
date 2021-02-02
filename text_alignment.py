@@ -57,9 +57,12 @@ class text_alignment(RodanTask):
         model_path = inputs['OCR Model'][0]['resource_path']
 
         self.logger.info('processing image...')
-        id = 'wkdir'
-        result = align.process(raw_image, transcript, model_path,
-            wkdir_name='ocr_{}'.format(id))
+        result = align.process(
+            raw_image=raw_image,
+            transcript=transcript,
+            ocropus_model=model_path,
+            wkdir_name='ocr_{}'.format('wkdir')
+        )
         syl_boxes, _, lines_peak_locs, _ = result
 
         self.logger.info('writing output to json...')

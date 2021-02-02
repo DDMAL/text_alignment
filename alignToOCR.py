@@ -426,9 +426,14 @@ if __name__ == '__main__':
             except AttributeError:
                 print('Pickle error: re-performing ocr')
 
-        id = hex(np.random.randint(2**32))
-        result = process(raw_image, transcript, ocropus_model,
-            wkdir_name='ocr_{}'.format(id), existing_ocr=existing_ocr, verbose=True)
+        result = process(
+            raw_image=raw_image,
+            transcript=transcript,
+            ocropus_model=ocropus_model,
+            wkdir_name='ocr_{}'.format(hex(np.random.randint(2**32))),
+            existing_ocr=existing_ocr,
+            verbose=True
+        )
         if result is None:
             continue
         syl_boxes, image, lines_peak_locs, all_chars = result
