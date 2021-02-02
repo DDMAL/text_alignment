@@ -16,6 +16,7 @@ import json
 import re
 import io
 import tempfile
+import subprocess32
 
 reload(preproc)
 reload(afw)
@@ -146,7 +147,13 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=para
             '--nocheck --llocs -m {} \'{}/*.png\''.format(quiet, ocropus_model, wkdir_name)
 
     print('running ocropus with: {}'.format(ocropus_command))
-    subprocess.check_call(ocropus_command, shell=True)
+    subprocess32.run(
+        [flag for flag in ocropus_command.split(' ') if flag != ''],
+        stderr=subprocess.STDOUT,
+        stdout=subprocess.STDOUT,
+        check=True,
+        shell=True
+    )
 
     # read character position results from llocs file
     all_chars = []
@@ -215,14 +222,33 @@ def process(raw_image,
     if not all_chars:
         # make directory to do stuff in
         if not os.path.exists(wkdir_name):
-            subprocess.check_call("mkdir " + wkdir_name, shell=True)
+            print(
+                subprocess32.run(
+                    ['mkdir', wkdir_name],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    check=True,
+                    shell=False,
+                ).stdout
+            )
         try:
             all_chars = perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name=wkdir_name, parallel=parallel, verbose=verbose)
         except subprocess.CalledProcessError:
             print('OCRopus failed! Skipping current file.')
             return None
         finally:
-            subprocess.check_call('rm -r ' + wkdir_name, shell=True)
+            try:          
+                print(
+                    subprocess32.run(
+                        ['rm', '-r', wkdir_name],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        check=True,
+                        shell=False,
+                    ).stdout
+                )
+            except subprocess.CalledProcessError:
+                print('File already deleted.')
 
     #############################
     # -- HANDLE ABBREVIATIONS --
