@@ -1,9 +1,9 @@
 from os.path import isfile, join
 import numpy as np
-import gamera.core as gc
-gc.init_gamera()
+# import gamera.core as gc
+# gc.init_gamera()
 import matplotlib.pyplot as plt
-from gamera.plugins.image_utilities import union_images
+# from gamera.plugins.image_utilities import union_images
 import pickle
 import itertools as iter
 import os
@@ -24,15 +24,6 @@ remove_capitals_scale = 10000   # removes large ccs. turned off for now
 # CC GROUPING (BLOBS)
 cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
 max_distance_to_staff = 200
-
-# i need a custom set of colors when working on cc analysis because i'm too colorblind for the default :(
-colors = [gc.RGBPixel(150, 0, 0),
-          gc.RGBPixel(0, 100, 0),
-          gc.RGBPixel(0, 0, 255),
-          gc.RGBPixel(250, 0, 255),
-          gc.RGBPixel(50, 150, 50),
-          gc.RGBPixel(0, 190, 230),
-          gc.RGBPixel(230, 100, 20)]
 
 
 def vertically_coincide(hline_position, comp_offset, comp_nrows, collision, collision_scale=collision_strip_scale):
@@ -332,11 +323,11 @@ def identify_text_lines(image_eroded):
     return line_strips, peak_locations, smoothed_projection
 
 
-def save_preproc_image(image, cc_strips, lines_peak_locs, fname):
+def save_preproc_image(image, line_strips, lines_peak_locs, fname):
     # color discovered CCS with unique colors
     # ccs = [j for i in cc_lines for j in i]
     # image = image.color_ccs(True)
-    im = image.to_rgb().to_pil()
+    im = Image.fromarray(image)
 
     text_size = 70
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
@@ -348,14 +339,22 @@ def save_preproc_image(image, cc_strips, lines_peak_locs, fname):
         draw.line([0, peak_loc, im.width, peak_loc], fill='gray', width=3)
 
     # draw rectangles around identified text lines
-    for line in cc_strips:
-        unioned = line
-        ul = (unioned.ul.x, unioned.ul.y)
-        lr = (unioned.lr.x, unioned.lr.y)
+    for line in line_strips:
+        ul = (line[0], line[1])
+        lr = (line[0] + line[2], line[1] + line[3])
         draw.rectangle([ul, lr], outline='black')
 
     # im.show()
     im.save('test_preproc_{}.png'.format(fname))
+
+
+def rotate_image(image, angle):
+    image_center = tuple(np.array(image.shape[1::-1]) / 2)
+    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
+    return result
+
+
 
 
 if __name__ == '__main__':
@@ -379,7 +378,8 @@ if __name__ == '__main__':
         cl = cv.morphologyEx(th3, cv.MORPH_CLOSE, kernel)
         eroded = cv.morphologyEx(cl, cv.MORPH_OPEN, kernel)
 
-        cv.imwrite('test.png', eroded)
+        # cv.imwrite('test.png', eroded)
+
         line_strips, lines_peak_locs, proj = identify_text_lines(eroded)
 
 
