@@ -69,7 +69,7 @@ def filename_to_text_func(transcript_path, mapping_path=None):
     else:
         with open(mapping_path) as file:
             reader = csv.reader(file, delimiter=',')
-            header = reader.next()
+            header = next(reader)
             for row in reader:
                 line = {}
                 line['seq'] = int(row[0])
