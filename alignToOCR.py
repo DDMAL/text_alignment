@@ -143,17 +143,22 @@ def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=para
     else:
         # the presence of extra quotes \' around the path to be globbed makes a difference.
         # sometimes. it's unclear.
-        ocropus_command = 'ocropus-rpred {} ' \
-            '--nocheck --llocs -m {} \'{}/*.png\''.format(quiet, ocropus_model, wkdir_name)
+        mypath = "/code/Rodan/" + wkdir_name
+        ocropus_command = 'ocropus-rpred {} --nocheck --llocs -m {} {}'.format(
+              quiet,
+              ocropus_model,
+              " ".join([os.path.join(mypath, x) for x in os.listdir(mypath) if os.path.isfile(os.path.join(mypath, x))])
+            )
 
-    print('running ocropus with: {}'.format(ocropus_command))
-    subprocess32.run(
-        [flag for flag in ocropus_command.split(' ') if flag != ''],
-        stderr=subprocess.STDOUT,
-        stdout=subprocess.STDOUT,
-        check=True,
-        shell=True
-    )
+    # subprocess.check_call(
+    #     [flag for flag in ocropus_command.split(' ') if flag != ''],
+    #     # stderr=subprocess.STDOUT,
+    #     # stdout=subprocess.STDOUT,
+    #     check=True,
+    #     shell=True,
+    #     cwd="/code/Rodan",
+    # )
+    subprocess.check_call(ocropus_command, shell=True)
 
     # read character position results from llocs file
     all_chars = []
@@ -224,7 +229,7 @@ def process(raw_image,
         if not os.path.exists(wkdir_name):
             print(
                 subprocess32.run(
-                    ['mkdir', wkdir_name],
+                    ['mkdir', "-p", wkdir_name],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     check=True,
