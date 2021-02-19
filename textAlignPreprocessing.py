@@ -132,8 +132,6 @@ def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes, cor
     segmentation
     '''
 
-    print(f'processing {fname}...')
-
     gray_img = cv.cvtColor(input_image, cv.COLOR_BGR2GRAY)
 
     blur = cv.GaussianBlur(gray_img, (5, 5), 0)
@@ -200,9 +198,6 @@ def identify_text_lines(image_eroded):
 
 
 def save_preproc_image(image, line_strips, lines_peak_locs, fname):
-    # color discovered CCS with unique colors
-    # ccs = [j for i in cc_lines for j in i]
-    # image = image.color_ccs(True)
     im = Image.fromarray(image)
 
     text_size = 70
@@ -240,15 +235,15 @@ if __name__ == '__main__':
     fnames = ['salzinnes_378']
 
     for fname in fnames:
-        print(f'processing {fname}...')
-        raw_image = cv.imread(f'./png/{fname}_text.png')
+        # print(f'processing {fname}...')
+        raw_image = cv.imread('./png/{}_text.png'.format(fname))
 
         img_bin, img_eroded, angle = preprocess_images(raw_image, soften=soften_amt, fill_holes=3)
 
         # cv.imwrite('test.png', img_eroded)
 
         line_strips, lines_peak_locs, proj = identify_text_lines(img_eroded)
-        # save_preproc_image(image, line_strips, lines_peak_locs, fname)
+        save_preproc_image(img_bin, line_strips, lines_peak_locs, fname)
 
     # plt.clf()
     # plt.plot(proj)

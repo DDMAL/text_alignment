@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import gamera.core as gc
-gc.init_gamera()
-from gamera.plugins.image_utilities import union_images
+# import gamera.core as gc
+# gc.init_gamera()
+# from gamera.plugins.image_utilities import union_images
 import matplotlib.pyplot as plt
 import textAlignPreprocessing as preproc
 import os
@@ -16,7 +16,10 @@ import json
 import re
 import io
 import tempfile
+import cv2 as cv
 
+
+from importlib import reload
 reload(preproc)
 reload(afw)
 reload(latsyl)
@@ -31,46 +34,6 @@ median_line_mult = 2
 # common.py file in ocrolib and change the way it's compressed from gunzip to gzip (gunzip is not
 # natively available on windows). also, parallel processing will not work.
 on_windows = (os.name == 'nt')
-
-
-class CharBox(object):
-    __slots__ = ['char', 'ul', 'lr', 'ulx', 'lrx', 'uly', 'lry', 'width', 'height']
-
-    def __init__(self, char, ul=None, lr=None):
-
-        self.char = char
-        if (ul is None) or (lr is None):
-            self.ul = None
-            self.lr = None
-            return
-        self.ul = tuple(ul)
-        self.lr = tuple(lr)
-        self.ulx = ul[0]
-        self.lrx = lr[0]
-        self.uly = ul[1]
-        self.lry = lr[1]
-        self.width = lr[0] - ul[0]
-        self.height = lr[1] - ul[1]
-
-    def __repr__(self):
-        if self.ul and self.lr:
-            return 'CharBox: \'{}\' at {}, {}'.format(self.char, self.ul, self.lr)
-        else:
-            return 'CharBox: \'{}\' empty'.format(self.char)
-
-
-def clean_special_chars(inp):
-    '''
-    removes some special characters from OCR output. ideally these would be useful but not clear how
-    best to integrate them into the alignment algorithm. unidecode doesn't seem like these either
-    '''
-    inp = inp.replace('~', '')
-    # inp = inp.replace('\xc4\x81', 'a')
-    # inp = inp.replace('\xc4\x93', 'e')
-    # # there is no i with bar above in unicode (???)
-    # inp = inp.replace('\xc5\x8d', 'o')
-    # inp = inp.replace('\xc5\xab', 'u')
-    return inp
 
 
 def read_file(fname):
@@ -126,63 +89,6 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     return CharBox(cbox.char, new_ul, new_lr)
 
 
-def perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name, parallel=parallel, verbose=True):
-
-    # save strips to directory
-    for i, strip in enumerate(cc_strips):
-        strip.save_image('./{}/_{}.png'.format(wkdir_name, i))
-
-    quiet = '' if verbose else '-q'
-
-    # call ocropus command to do OCR on each saved line strip.
-    if on_windows:
-        cwd = os.getcwd()
-        ocropus_command = 'python ./ocropy-master/ocropus-rpred ' \
-            '--nocheck --llocs -m {} {}/{}/*'.format(ocropus_model, cwd, wkdir_name)
-    else:
-        # the presence of extra quotes \' around the path to be globbed makes a difference.
-        # sometimes. it's unclear.
-        ocropus_command = 'ocropus-rpred {} ' \
-            '--nocheck --llocs -m {} \'{}/*.png\''.format(quiet, ocropus_model, wkdir_name)
-
-    print('running ocropus with: {}'.format(ocropus_command))
-    subprocess.check_call(ocropus_command, shell=True)
-
-    # read character position results from llocs file
-    all_chars = []
-    other_chars = []
-    for i in range(len(cc_strips)):
-        locs_file = './{}/_{}.llocs'.format(wkdir_name, i)
-        with io.open(locs_file, encoding='utf-8') as f:
-            locs = [line.rstrip('\n') for line in f]
-
-        x_min = cc_strips[i].offset_x
-        y_min = cc_strips[i].offset_y
-        y_max = cc_strips[i].offset_y + cc_strips[i].height
-
-        # note: ocropus seems to associate every character with its RIGHTMOST edge. we want the
-        # left-most edge, so we associate each character with the previous char's right edge
-        text_line = []
-        prev_xpos = x_min
-        for l in locs:
-            lsp = l.split('\t')
-            cur_xpos = int(np.round(float(lsp[1]) + x_min))
-
-            ul = (prev_xpos, y_min)
-            lr = (cur_xpos, y_max)
-
-            if lsp[0] == '~' or lsp[0] == '':
-                new_box = CharBox(unicode(lsp[0]), ul, lr)
-                other_chars.append(new_box)
-            else:
-                new_box = CharBox(clean_special_chars(lsp[0]), ul, lr)
-                all_chars.append(new_box)
-
-            prev_xpos = cur_xpos
-
-    return all_chars
-
-
 def process(raw_image,
             transcript,
             ocropus_model,
@@ -204,7 +110,7 @@ def process(raw_image,
     # get raw image of text layer and preform preprocessing to find text lines
     print('identifying text lines...')
     image, eroded, angle = preproc.preprocess_images(raw_image)
-    cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(image, eroded)
+    cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(eroded)
 
     #################################
     # -- PERFORM OCR WITH OCROPUS --
@@ -213,16 +119,7 @@ def process(raw_image,
     all_chars = existing_ocr
 
     if not all_chars:
-        # make directory to do stuff in
-        if not os.path.exists(wkdir_name):
-            subprocess.check_call("mkdir " + wkdir_name, shell=True)
-        try:
-            all_chars = perform_ocr_with_ocropus(cc_strips, ocropus_model, wkdir_name=wkdir_name, parallel=parallel, verbose=verbose)
-        except subprocess.CalledProcessError:
-            print('OCRopus failed! Skipping current file.')
-            return None
-        finally:
-            subprocess.check_call('rm -r ' + wkdir_name, shell=True)
+        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocropus_model)
 
     #############################
     # -- HANDLE ABBREVIATIONS --
@@ -377,7 +274,7 @@ if __name__ == '__main__':
 
     text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     manuscript = 'salzinnes'
-    f_inds = ['002v', '003v', '040r']
+    f_inds = ['040r']
     ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
@@ -398,33 +295,33 @@ if __name__ == '__main__':
     for ind in f_inds:
 
         try:
-            fname, transcript = text_func(ind)
+            f_id, transcript = text_func(ind)
         except ValueError as e:
             print(e)
             print('no chants listed for page {}'.format(ind))
             continue
 
-        fname = '{}_{}'.format(manuscript, fname)
-        ocr_pickle = None #  './pik/{}_boxes.pickle'.format(fname)
-        text_layer_fname = './png/{}_text.png'.format(fname)
+        fname = f'{manuscript}_{f_id}'
+        ocr_pickle = None  # './pik/{}_boxes.pickle'.format(fname)
+        text_layer_fname = f'./png/{fname}_text.png'
 
         if not os.path.isfile(text_layer_fname):
             print('cannot find files for {}.'.format(fname))
             continue
 
         print('processing {}...'.format(fname))
-        raw_image = gc.load_image('./png/' + fname + '_text.png')
+        raw_image = cv.imread(f'./png/{fname}_text.png')
 
         existing_ocr = None
-        if ocr_pickle:
-            try:
-                with open(ocr_pickle) as f:
-                    existing_ocr = pickle.load(f)
-                print('using pickled ocr results in {}...'.format(ocr_pickle))
-            except IOError:
-                print('Pickle file {} not found - performing ocr instead'.format(ocr_pickle))
-            except AttributeError:
-                print('Pickle error: re-performing ocr')
+        # if ocr_pickle:
+        #     try:
+        #         with open(ocr_pickle) as f:
+        #             existing_ocr = pickle.load(f)
+        #         print('using pickled ocr results in {}...'.format(ocr_pickle))
+        #     except IOError:
+        #         print('Pickle file {} not found - performing ocr instead'.format(ocr_pickle))
+        #     except AttributeError:
+        #         print('Pickle error: re-performing ocr')
 
         id = hex(np.random.randint(2**32))
         result = process(raw_image, transcript, ocropus_model,
