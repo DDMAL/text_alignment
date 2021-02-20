@@ -10,12 +10,10 @@ import shutil
 import numpy as np
 import affine_needleman_wunsch as afw
 import latinSyllabification as latsyl
-import parse_cantus_csv as pcc
 import subprocess
 import json
 import re
 import io
-import tempfile
 import cv2 as cv
 import perform_ocr
 
@@ -72,12 +70,12 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     new_ul = np.round([new_ulx, new_uly]).astype('int16')
     new_lr = np.round([new_lrx, new_lry]).astype('int16')
 
-    return CharBox(cbox.char, new_ul, new_lr)
+    return perform_ocr.CharBox(cbox.char, new_ul, new_lr)
 
 
 def process(raw_image,
             transcript,
-            ocropus_model,
+            ocr_model,
             seq_align_params={},
             median_line_mult=median_line_mult,
             existing_ocr=None,
@@ -97,20 +95,13 @@ def process(raw_image,
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(eroded)
 
     #################################
-    # -- PERFORM OCR WITH OCROPUS --
+    # -- PERFORM OCR WITH CALAMARI --
     #################################
 
     all_chars = existing_ocr
     if not all_chars:
-        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocropus_model, verbose)
+        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocr_model, verbose)
     all_chars = perform_ocr.handle_abbreviations(all_chars)
-
-    #############################
-    # -- HANDLE ABBREVIATIONS --
-    #############################
-    print('handling abbreviations...')
-
-
 
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
@@ -129,6 +120,7 @@ def process(raw_image,
         ocr=list(ocr),
         **seq_align_params
         )
+
     tra_align = ''.join(tra_align)
     ocr_align = ''.join(ocr_align)
 
@@ -143,7 +135,7 @@ def process(raw_image,
     # same points as the ocr_align string does, and is thus the same length as tra_align.
     for i, char in enumerate(ocr_align):
         if char == '_':
-            all_chars.insert(i, CharBox('_'))
+            all_chars.insert(i, perform_ocr.CharBox('_'))
 
     # this could very possibly go wrong (special chars, bug in alignment algorithm, etc) so better
     # make sure that this condition is holding at this point
@@ -178,12 +170,12 @@ def process(raw_image,
 
         new_ul = (min(x.ulx for x in align_boxes), min(x.uly for x in align_boxes))
         new_lr = (max(x.lrx for x in align_boxes), max(x.lry for x in align_boxes))
-        syl_boxes.append(CharBox(syl, new_ul, new_lr))
+        syl_boxes.append(perform_ocr.CharBox(syl, new_ul, new_lr))
 
-    print('rotating bboxes again...')
-    # finally, rotate syl_boxes back by the angle that the page was rotated by
-    for i in range(len(syl_boxes)):
-        syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, image.dim, raw_image.dim)
+    # print('rotating bboxes again...')
+    # # finally, rotate syl_boxes back by the angle that the page was rotated by
+    # for i in range(len(syl_boxes)):
+    #     syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, image.dim, raw_image.dim)
 
     return syl_boxes, image, lines_peak_locs, all_chars_copy
 
@@ -210,8 +202,8 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
 
 
 def draw_results_on_page(image, syl_boxes, lines_peak_locs):
-    im = image.to_greyscale().to_pil()
-    text_size = image.ncols // 74
+    im = Image.fromarray(image)
+    text_size = im.size[1] // 70
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
     draw = ImageDraw.Draw(im)
 
@@ -237,7 +229,6 @@ def draw_results_on_page(image, syl_boxes, lines_peak_locs):
 if __name__ == '__main__':
 
     import parse_cantus_csv as pcc
-    reload(pcc)
     import PIL
     import pickle
     from PIL import Image, ImageDraw, ImageFont
@@ -246,22 +237,22 @@ if __name__ == '__main__':
     text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     manuscript = 'salzinnes'
     f_inds = ['040r']
-    ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
+    ocr_model = './models/mcgill_salzinnes/1.ckpt'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
     # manuscript = 'einsiedeln'
     # f_inds = range(0, 11)
-    # ocropus_model = './salzinnes_model-00054500.pyrnn.gz'
+    # ocr_model = './salzinnes_model-00054500.pyrnn.gz'
 
     # text_func = pcc.filename_to_text_func('./csv/stgall390_123717.csv')
     # manuscript = 'stgall390'
     # f_inds = ['022', '023', '024', '025', '007']
-    # ocropus_model = 'stgall2-00017000.pyrnn.gz'
+    # ocr_model = 'stgall2-00017000.pyrnn.gz'
 
     # text_func = pcc.filename_to_text_func('./csv/stgall388_123750.csv')
     # manuscript = 'stgall388'
     # f_inds = ['028', '029', '030', '031', '032']
-    # ocropus_model = 'stgall3-00017000.pyrnn.gz'
+    # ocr_model = 'stgall3-00017000.pyrnn.gz'
 
     for ind in f_inds:
 
@@ -272,16 +263,16 @@ if __name__ == '__main__':
             print('no chants listed for page {}'.format(ind))
             continue
 
-        fname = f'{manuscript}_{f_id}'
+        fname = '{}_{}'.format(manuscript, f_id)
         ocr_pickle = None  # './pik/{}_boxes.pickle'.format(fname)
-        text_layer_fname = f'./png/{fname}_text.png'
+        text_layer_fname = './png/{}_text.png'.format(fname)
 
         if not os.path.isfile(text_layer_fname):
             print('cannot find files for {}.'.format(fname))
             continue
 
         print('processing {}...'.format(fname))
-        raw_image = cv.imread(f'./png/{fname}_text.png')
+        raw_image = cv.imread('./png/{}_text.png'.format(fname))
 
         existing_ocr = None
         # if ocr_pickle:
@@ -294,9 +285,8 @@ if __name__ == '__main__':
         #     except AttributeError:
         #         print('Pickle error: re-performing ocr')
 
-        id = hex(np.random.randint(2**32))
-        result = process(raw_image, transcript, ocropus_model,
-            wkdir_name='ocr_{}'.format(id), existing_ocr=existing_ocr, verbose=True)
+        result = process(raw_image, transcript, ocr_model, existing_ocr=existing_ocr, verbose=True)
+
         if result is None:
             continue
         syl_boxes, image, lines_peak_locs, all_chars = result

@@ -10,19 +10,6 @@ consonant_groups += [x[0].upper() + x[1:] for x in consonant_groups]
 diphthongs += [x[0].upper() + x[1:] for x in diphthongs]
 vowels += [x[0].upper() + x[1:] for x in vowels]
 
-abbreviations = {
-    u'dns': ['do', 'mi', 'nus'],
-    u'dūs': ['do', 'mi', 'nus'],
-    u'dne': ['do', 'mi', 'ne'],
-    u'alla': ['al', 'le', 'lu', 'ia'],
-    u'xpc': ['xp', 'ic', 'tuc'],
-    u'^': ['us'],
-    u'ā': ['am'],
-    u'ē': ['em'],
-    u'ū': ['um'],
-    u'ō': ['om']
-}
-
 
 def syllabify_word(inp, verbose=False):
     '''

@@ -1,6 +1,18 @@
 from calamari_ocr.ocr.predictor import Predictor
 import cv2 as cv
 
+abbreviations = {
+    u'dns': ['do', 'mi', 'nus'],
+    u'dūs': ['do', 'mi', 'nus'],
+    u'dne': ['do', 'mi', 'ne'],
+    u'alla': ['al', 'le', 'lu', 'ia'],
+    u'xpc': ['xp', 'ic', 'tuc'],
+    u'^': ['us'],
+    u'ā': ['am'],
+    u'ē': ['em'],
+    u'ū': ['um'],
+    u'ō': ['om']
+}
 
 class CharBox(object):
     __slots__ = ['char', 'ul', 'lr', 'ulx', 'lrx', 'uly', 'lry', 'width', 'height']
@@ -76,6 +88,31 @@ def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=False):
 
     # remove all chars that are empty or otherwise invalid
     all_chars = list(filter(lambda x: x.char not in ['', '~'], all_chars))
+
+    return all_chars
+
+
+def handle_abbreviations(all_chars, max_iters=10e4):
+    # replace abbreviations found in the ocr (e.g. dns -> do mi nus)
+    for abb in abbreviations.keys():
+        iter = 0
+        while True:
+            ocr_str = ''.join(str(x.char) for x in all_chars)
+            idx = ocr_str.find(abb)
+
+            iter += 1
+            if idx == -1 or iter > max_iters:
+                # move on if this abbreviation no longer appears or if iterating too long
+                break
+
+            ins = []
+            for i, segment in enumerate(abbreviations[abb]):
+                split_box = all_chars[i + idx]
+                ins += [CharBox(x, split_box.ul, split_box.lr) for x in segment]
+
+            # insert new charboxes in the place of the charbox that should be abbreviated
+            all_chars = all_chars[:idx] + ins + all_chars[idx + len(abb):]
+
     return all_chars
 
 
@@ -92,3 +129,4 @@ if __name__ == '__main__':
     path_to_ocr_model = './models/mcgill_salzinnes/1.ckpt'
 
     all_chars = recognize_text_strips(img_bin, line_strips, path_to_ocr_model, True)
+    all_chars = handle_abbreviations(all_chars, max_iters=10e4)
