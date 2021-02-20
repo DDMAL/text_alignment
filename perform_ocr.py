@@ -73,6 +73,9 @@ def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=False):
             ]
 
         all_chars += res_line
+
+    # remove all chars that are empty or otherwise invalid
+    all_chars = list(filter(lambda x: x.char not in ['', '~'], all_chars))
     return all_chars
 
 
