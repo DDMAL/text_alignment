@@ -42,9 +42,9 @@ def clean_special_chars(inp):
     return inp
 
 
-def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=True):
+def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=False):
 
-    predictor = Predictor(checkpoint='path_to_ocr_model)
+    predictor = Predictor(checkpoint=path_to_ocr_model)
 
     # x, y, width, height
     strips = []
@@ -55,43 +55,24 @@ def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=True):
         strips.append(strip)
 
     results = []
-    for r in predictor.predict_raw(strips):
+    for r in predictor.predict_raw(strips, progress_bar=verbose):
         results.append(r)
 
-    
-
-    # read character position results from llocs file
     all_chars = []
-    other_chars = []
-    for i in range(len(cc_strips)):
-        locs_file = './{}/_{}.llocs'.format(wkdir_name, i)
-        with io.open(locs_file, encoding='utf-8') as f:
-            locs = [line.rstrip('\n') for line in f]
 
-        x_min = cc_strips[i].offset_x
-        y_min = cc_strips[i].offset_y
-        y_max = cc_strips[i].offset_y + cc_strips[i].height
+    # iterate over results and make charbox objects out of every character
+    for i, cs in enumerate(cc_strips):
 
-        # note: ocropus seems to associate every character with its RIGHTMOST edge. we want the
-        # left-most edge, so we associate each character with the previous char's right edge
-        text_line = []
-        prev_xpos = x_min
-        for l in locs:
-            lsp = l.split('\t')
-            cur_xpos = int(np.round(float(lsp[1]) + x_min))
+        strip_x_min, strip_y_min, strip_width, strip_height = cs
+        res_line = [
+            CharBox(
+                clean_special_chars(x.chars[0].char),
+                (x.global_start, strip_y_min),
+                (x.global_end, strip_y_min + strip_height))
+            for x in results[i].prediction.positions
+            ]
 
-            ul = (prev_xpos, y_min)
-            lr = (cur_xpos, y_max)
-
-            if lsp[0] == '~' or lsp[0] == '':
-                new_box = CharBox(unicode(lsp[0]), ul, lr)
-                other_chars.append(new_box)
-            else:
-                new_box = CharBox(clean_special_chars(lsp[0]), ul, lr)
-                all_chars.append(new_box)
-
-            prev_xpos = cur_xpos
-
+        all_chars += res_line
     return all_chars
 
 
@@ -105,17 +86,6 @@ if __name__ == '__main__':
     img_bin, img_eroded, angle = preproc.preprocess_images(raw_image)
     line_strips, lines_peak_locs, proj = preproc.identify_text_lines(img_eroded)
 
-    predictor = Predictor(checkpoint='./models/mcgill_salzinnes/1.ckpt')
+    path_to_ocr_model = './models/mcgill_salzinnes/1.ckpt'
 
-    # x, y, width, height
-    strips = []
-    for ls in line_strips:
-        x, y, w, h = ls
-        # WHY IS Y FIRST? WHAT'S THE DEAL WITH THIS
-        strip = img_eroded[y:y + h, x:x + w]
-        strips.append(strip)
-
-    results = []
-
-    for r in predictor.predict_raw(strips):
-        results.append(r)
+    all_chars = recognize_text_strips(img_bin, line_strips, path_to_ocr_model, True)
