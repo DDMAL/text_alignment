@@ -17,7 +17,7 @@ class text_alignment(RodanTask):
     settings = {
         'title': 'Text Alignment Settings',
         'type': 'object',
-        'job_queue': 'Python2',
+        'job_queue': 'Python3',
     }
 
     input_port_types = [{

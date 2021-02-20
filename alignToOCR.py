@@ -17,23 +17,9 @@ import re
 import io
 import tempfile
 import cv2 as cv
+import perform_ocr
 
-
-from importlib import reload
-reload(preproc)
-reload(afw)
-reload(latsyl)
-reload(pcc)
-
-parallel = 2
 median_line_mult = 2
-
-# there are some hacks to make this work on windows (locally, not as a rodan job!).
-# no guarantees, and OCRopus will throw out a lot of warning messages, but it works for local dev.
-# you will have to use a model that is NOT zipped, or else go into the
-# common.py file in ocrolib and change the way it's compressed from gunzip to gzip (gunzip is not
-# natively available on windows). also, parallel processing will not work.
-on_windows = (os.name == 'nt')
 
 
 def read_file(fname):
@@ -93,8 +79,6 @@ def process(raw_image,
             transcript,
             ocropus_model,
             seq_align_params={},
-            wkdir_name='wkdir_ocropy',
-            parallel=parallel,
             median_line_mult=median_line_mult,
             existing_ocr=None,
             verbose=True):
@@ -117,37 +101,24 @@ def process(raw_image,
     #################################
 
     all_chars = existing_ocr
-
     if not all_chars:
-        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocropus_model)
+        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocropus_model, verbose)
+    all_chars = perform_ocr.handle_abbreviations(all_chars)
 
     #############################
     # -- HANDLE ABBREVIATIONS --
     #############################
     print('handling abbreviations...')
 
-    abbreviations = latsyl.abbreviations
-    for abb in abbreviations.keys():
-        while True:
-            ocr_str = ''.join(unicode(x.char) for x in all_chars)
-            idx = ocr_str.find(abb)
 
-            if idx == -1:
-                break
-            ins = []
-
-            for i, segment in enumerate(abbreviations[abb]):
-                split_box = all_chars[i + idx]
-                ins += [CharBox(x, split_box.ul, split_box.lr) for x in segment]
-            all_chars = all_chars[:idx] + ins + all_chars[idx + len(abb):]
-
-    # get full ocr transcript
-    ocr = ''.join(x.char for x in all_chars)
-    all_chars_copy = list(all_chars)
 
     ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
     ###################################
+
+    # get full ocr transcript
+    ocr = ''.join(x.char for x in all_chars)
+    all_chars_copy = list(all_chars)
 
     # remove special characters, but maintain case
     transcript = pcc.clean(transcript)
