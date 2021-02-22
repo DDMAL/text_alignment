@@ -85,28 +85,20 @@ def process(raw_image,
     and OCR on the text layer and then aligns the results to the transcript text.
     '''
 
-    #######################
     # -- PRE-PROCESSING --
-    #######################
-
     # get raw image of text layer and preform preprocessing to find text lines
     print('identifying text lines...')
     image, eroded, angle = preproc.preprocess_images(raw_image)
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(eroded)
 
-    #################################
     # -- PERFORM OCR WITH CALAMARI --
-    #################################
 
     all_chars = existing_ocr
     if not all_chars:
         all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocr_model, verbose)
     all_chars = perform_ocr.handle_abbreviations(all_chars)
 
-    ###################################
     # -- PERFORM AND PARSE ALIGNMENT --
-    ###################################
-
     # get full ocr transcript
     ocr = ''.join(x.char for x in all_chars)
     all_chars_copy = list(all_chars)
@@ -124,12 +116,14 @@ def process(raw_image,
     tra_align = ''.join(tra_align)
     ocr_align = ''.join(ocr_align)
 
+    # -- SPLIT INTO SYLLABLES --
     print('syllabifying...')
     syls = latsyl.syllabify_text(transcript)
     align_transcript_boxes = []
     current_offset = 0
     syl_boxes = []
 
+    # -- MATCH SYLLABLES TO ALIGNED OCR --
     print('matching syllables to alignment...')
     # insert gaps into ocr output based on alignment string. this causes all_chars to have gaps at the
     # same points as the ocr_align string does, and is thus the same length as tra_align.

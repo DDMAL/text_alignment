@@ -79,8 +79,8 @@ def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=False):
         res_line = [
             CharBox(
                 clean_special_chars(x.chars[0].char),
-                (x.global_start, strip_y_min),
-                (x.global_end, strip_y_min + strip_height))
+                (x.global_start + strip_x_min, strip_y_min),
+                (x.global_end + strip_x_min, strip_y_min + strip_height))
             for x in results[i].prediction.positions
             ]
 
