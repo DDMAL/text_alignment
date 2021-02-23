@@ -4,12 +4,12 @@
 # gc.init_gamera()
 # from gamera.plugins.image_utilities import union_images
 import matplotlib.pyplot as plt
-import textAlignPreprocessing as preproc
+import image_preprocessing as preproc
 import os
 import shutil
 import numpy as np
 import affine_needleman_wunsch as afw
-import latinSyllabification as latsyl
+import latin_syllabification as latsyl
 import subprocess
 import json
 import re

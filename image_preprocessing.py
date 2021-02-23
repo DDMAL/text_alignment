@@ -124,7 +124,7 @@ def moving_avg_filter(data, filter_size=filter_size):
     return smoothed
 
 
-def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes, correct_rotation=True):
+def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes):
     '''
     Perform some softening / erosion / binarization on the text layer
     '''
@@ -138,11 +138,12 @@ def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes, cor
     cl = cv.morphologyEx(img_bin, cv.MORPH_CLOSE, kernel)
     img_eroded = cv.morphologyEx(cl, cv.MORPH_OPEN, kernel)
 
-    line_strips, lines_peak_locs, proj = identify_text_lines(img_eroded)
+    angle = find_rotation_angle(img_eroded)
+    img_rotated = rotate_image(img_eroded, -1 * angle, white_background=True)
 
-    angle = 0
+    line_strips, lines_peak_locs, proj = identify_text_lines(img_rotated)
 
-    return img_bin, img_eroded, angle
+    return img_bin, img_rotated, angle
 
 
 def identify_text_lines(img, widen_strips_factor=1):
@@ -223,11 +224,44 @@ def save_preproc_image(image, line_strips, lines_peak_locs, fname):
     im.save('test_preproc_{}.png'.format(fname))
 
 
-def rotate_image(image, angle):
+def rotate_image(image, angle, white_background=False):
+    border = (255, 255, 255) if white_background else None
     image_center = tuple(np.array(image.shape[1::-1]) / 2)
-    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
-    return result
+    rot_mat = cv.getRotationMatrix2D(image_center, angle, 1.0)
+    img_rot = cv.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv.INTER_LINEAR, borderValue=border)
+    return img_rot
+
+
+def find_rotation_angle(img, coarse_bound=2, fine_bound=0.1):
+    # find most likely angle of rotation in two-step refining process
+    # similar process in gamera, see the paper
+    # "Optical recognition of psaltic Byzantine chant notation" by Dalitz. et al (2008)
+
+    num_trials = int(coarse_bound / fine_bound)
+    img_invert = 255 - img
+    dim = tuple(np.array(img.shape) // 2)
+    img_resized = cv.resize(img_invert, dim, interpolation=cv.INTER_AREA)
+
+    def project_angles(img_to_project, angles_to_try):
+        best_angle = 0
+        highest_variation = 0
+        for a in angles_to_try:
+            rot_img = rotate_image(img_to_project, a)
+            proj = np.sum(rot_img, 1).astype('int64')
+            variation = np.sum(np.diff(proj) ** 2)
+            if variation > highest_variation:
+                highest_variation = variation
+                best_angle = a
+
+        return best_angle
+
+    angles_to_try = np.linspace(-coarse_bound, coarse_bound, num_trials)
+    coarse_angle = project_angles(img_resized, angles_to_try)
+
+    angles_to_try = np.linspace(-fine_bound + coarse_angle, fine_bound + coarse_angle, num_trials)
+    fine_angle = project_angles(img_resized, angles_to_try)
+
+    return fine_angle
 
 
 if __name__ == '__main__':
@@ -236,17 +270,20 @@ if __name__ == '__main__':
     import numpy as np
     import cv2 as cv
 
-    fnames = ['salzinnes_378', 'salzinnes_222', 'salzinnes_315', 'salzinnes_160']
+    indices = [25, 34, 51, 65, 87, 152, 249, 295, 301, 343, 310, 412]
+    fnames = ['salzinnes_{:03}'.format(x) for x in indices]
 
     for fname in fnames:
         print('processing {}...'.format(fname))
         raw_image = cv.imread('./png/{}_text.png'.format(fname))
 
-        img_bin, img_eroded, angle = preprocess_images(raw_image, soften=soften_amt, fill_holes=3)
+        img_bin, img_rotated, angle = preprocess_images(raw_image, soften=soften_amt, fill_holes=3)
+
+        print(angle)
 
         # cv.imwrite('test.png', img_eroded)
 
-        line_strips, lines_peak_locs, proj = identify_text_lines(img_eroded)
+        line_strips, lines_peak_locs, proj = identify_text_lines(img_rotated)
         save_preproc_image(img_bin, line_strips, lines_peak_locs, fname)
 
     # plt.clf()
