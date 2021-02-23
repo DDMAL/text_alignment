@@ -12,13 +12,11 @@ import cv2 as cv
 saturation_thresh = 0.9
 sat_area_thresh = 150
 soften_amt = 5          # size of gaussian blur to apply before taking threshold
-fill_holes = 3          # size of kernel used for morphological operations when despeckling
+fill_holes = 5          # size of kernel used for morphological operations when despeckling
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 30                # size of moving-average filter used to smooth projection
 prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
-collision_strip_scale = 1       # in [0,inf]; amt of each cc to consider when clipping
-remove_capitals_scale = 10000   # removes large ccs. turned off for now
 
 # CC GROUPING (BLOBS)
 cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
@@ -128,13 +126,12 @@ def moving_avg_filter(data, filter_size=filter_size):
 
 def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes, correct_rotation=True):
     '''
-    use gamera to do some denoising, etc on the text layer before attempting text line
-    segmentation
+    Perform some softening / erosion / binarization on the text layer
     '''
 
     gray_img = cv.cvtColor(input_image, cv.COLOR_BGR2GRAY)
 
-    blur = cv.GaussianBlur(gray_img, (5, 5), 0)
+    blur = cv.GaussianBlur(gray_img, (soften, soften), 0)
     ret3, img_bin = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
 
     kernel = np.ones((fill_holes, fill_holes), np.uint8)
