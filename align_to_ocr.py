@@ -35,13 +35,8 @@ def read_file(fname):
     return lines
 
 
-def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
-    pivot = gc.Point(orig_dim.ncols / 2, orig_dim.nrows / 2)
-
-    # amount to translate to compensate for padding added by gamera's rotation in preprocessing.
-    # i am pretty sure this is the most "correct" amount. my math might be off.
-    dx = (orig_dim.ncols - target_dim.ncols) / 2
-    dy = (orig_dim.nrows - target_dim.nrows) / 2
+def rotate_bbox(cbox, angle, pivot, radians=False):
+    px, py = pivot
 
     if not radians:
         angle = angle * np.pi / 180
@@ -50,10 +45,10 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     c = np.cos(angle)
 
     # move to origin
-    old_ulx = cbox.ulx - pivot.x
-    old_uly = cbox.uly - pivot.y
-    old_lrx = cbox.lrx - pivot.x
-    old_lry = cbox.lry - pivot.y
+    old_ulx = cbox.ulx #- px
+    old_uly = cbox.uly #- py
+    old_lrx = cbox.lrx #- px
+    old_lry = cbox.lry #- py
 
     # rotate using a 2d rotation matrix
     new_ulx = (old_ulx * c) - (old_uly * s)
@@ -61,11 +56,11 @@ def rotate_bbox(cbox, angle, orig_dim, target_dim, radians=False):
     new_lrx = (old_lrx * c) - (old_lry * s)
     new_lry = (old_lrx * s) + (old_lry * c)
 
-    # move back to original position adjusted for padding
-    new_ulx += (pivot.x - dx)
-    new_uly += (pivot.y - dy)
-    new_lrx += (pivot.x - dx)
-    new_lry += (pivot.y - dy)
+    # move back to original position
+    # new_ulx += (px - dx)
+    # new_uly += (py - dy)
+    # new_lrx += (px - dx)
+    # new_lry += (py - dy)
 
     new_ul = np.round([new_ulx, new_uly]).astype('int16')
     new_lr = np.round([new_lrx, new_lry]).astype('int16')
@@ -166,10 +161,11 @@ def process(raw_image,
         new_lr = (max(x.lrx for x in align_boxes), max(x.lry for x in align_boxes))
         syl_boxes.append(perform_ocr.CharBox(syl, new_ul, new_lr))
 
-    # print('rotating bboxes again...')
-    # # finally, rotate syl_boxes back by the angle that the page was rotated by
-    # for i in range(len(syl_boxes)):
-    #     syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, image.dim, raw_image.dim)
+    print('rotating bboxes again...')
+    # finally, rotate syl_boxes back by the angle that the page was rotated by
+    pivot = (image.shape[0] // 2, image.shape[1] // 2)
+    for i in range(len(syl_boxes)):
+        syl_boxes[i] = rotate_bbox(syl_boxes[i], -1 * angle, pivot)
 
     return syl_boxes, image, lines_peak_locs, all_chars_copy
 
@@ -230,7 +226,7 @@ if __name__ == '__main__':
 
     text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     manuscript = 'salzinnes'
-    f_inds = ['040r']
+    f_inds = ['040r', '142v', '087r', '132v']
     ocr_model = './models/mcgill_salzinnes/1.ckpt'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')

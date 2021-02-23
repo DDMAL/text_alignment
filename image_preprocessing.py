@@ -162,16 +162,6 @@ def identify_text_lines(img, widen_strips_factor=1):
 
     # calculate normalized log prominence of all peaks in projection
     peak_locations = find_peak_locations(smoothed_projection)
-
-    # draw a horizontal white line at the local minima of the vertical projection. this ensures
-    # that every connected component can intersect at most one text line.
-    for i in range(len(peak_locations) - 1):
-        start = peak_locations[i]
-        end = peak_locations[i + 1]
-        idx = np.argmin(smoothed_projection[start:end])
-        idx += start
-        img[idx, :] = 255
-
     diff_proj_peaks = find_peak_locations(np.abs(np.diff(smoothed_projection)))
 
     line_strips = []
@@ -190,7 +180,9 @@ def identify_text_lines(img, widen_strips_factor=1):
 
         # extend bounds of strip slightly away from peak location, for safety (diacritics, etc)
         lower_bound -= int((p - lower_bound) * widen_strips_factor)
+        lower_bound = max(0, lower_bound)
         higher_bound += int((higher_bound - p) * widen_strips_factor)
+        higher_bound = min(img.shape[0], higher_bound)
 
         # tighten up strip by finding bounding box around contents
         mask = np.zeros(img.shape, np.uint8)
@@ -198,6 +190,10 @@ def identify_text_lines(img, widen_strips_factor=1):
         strip_bounds = cv.boundingRect(mask)
 
         line_strips.append(strip_bounds)
+
+    # go back and check to make sure this process didn't fail. if it did, we'll have bounding
+    # boxes at [0, 0, 0, 0]. as a failsafe, use the median height of other bounding boxes
+    # in place of failed bounding boxes.
 
     return line_strips, peak_locations, smoothed_projection
 
@@ -270,7 +266,7 @@ if __name__ == '__main__':
     import numpy as np
     import cv2 as cv
 
-    indices = [25, 34, 51, 65, 87, 152, 249, 295, 301, 343, 310, 412]
+    indices = [101] # [25, 34, 51, 65, 87, 152, 249, 295, 301, 343, 310, 412]
     fnames = ['salzinnes_{:03}'.format(x) for x in indices]
 
     for fname in fnames:
@@ -278,9 +274,6 @@ if __name__ == '__main__':
         raw_image = cv.imread('./png/{}_text.png'.format(fname))
 
         img_bin, img_rotated, angle = preprocess_images(raw_image, soften=soften_amt, fill_holes=3)
-
-        print(angle)
-
         # cv.imwrite('test.png', img_eroded)
 
         line_strips, lines_peak_locs, proj = identify_text_lines(img_rotated)
