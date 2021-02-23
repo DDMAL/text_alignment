@@ -123,7 +123,7 @@ def process(raw_image,
     current_offset = 0
     syl_boxes = []
 
-    # -- MATCH SYLLABLES TO ALIGNED OCR --
+    # -- MATCH SYLLABLES TO ALIGNED  --
     print('matching syllables to alignment...')
     # insert gaps into ocr output based on alignment string. this causes all_chars to have gaps at the
     # same points as the ocr_align string does, and is thus the same length as tra_align.

@@ -148,7 +148,7 @@ def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes, cor
     return img_bin, img_eroded, angle
 
 
-def identify_text_lines(image_eroded):
+def identify_text_lines(img, widen_strips_factor=1):
     '''
     finds text lines on preprocessed image. step-by-step:
     1. find peak locations of vertical projection
@@ -159,7 +159,7 @@ def identify_text_lines(image_eroded):
     '''
 
     # compute y-axis projection of input image and filter with sliding window average
-    project = np.clip(255 - image_eroded, 0, 1).sum(1)
+    project = np.clip(255 - img, 0, 1).sum(1)
     smoothed_projection = moving_avg_filter(project, filter_size)
 
     # calculate normalized log prominence of all peaks in projection
@@ -172,26 +172,33 @@ def identify_text_lines(image_eroded):
         end = peak_locations[i + 1]
         idx = np.argmin(smoothed_projection[start:end])
         idx += start
-        image_eroded[idx, :] = 255
+        img[idx, :] = 255
 
-    # perform connected component analysis
-    num_labels, labels = cv.connectedComponents(255 - image_eroded)
-
-    # c = Counter(labels.reshape(-1))
-    # for k in c.keys():
-    #     if c[k] < noise_area_thresh:
-    #         labels[labels == k] = 0
+    diff_proj_peaks = find_peak_locations(np.abs(np.diff(smoothed_projection)))
 
     line_strips = []
-    cc_lines = []
-    for line_loc in peak_locations:
+    for p in peak_locations:
+        # get the largest diff-peak smaller than this peak, and the smallest diff-peak that's larger
+        lower_peaks = [x for x in diff_proj_peaks if x < p]
+        lower_bound = max(lower_peaks) if len(lower_peaks) > 0 else 0
 
-        # get all components that intersect this horizontal projection peak location
-        int_components = list(set(labels[line_loc, :]))
-        int_components.remove(0)
+        higher_peaks = [x for x in diff_proj_peaks if x > p]
+        higher_bound = min(higher_peaks) if len(higher_peaks) > 0 else 0
 
-        int_labels = np.isin(labels, int_components).astype('uint8')
-        strip_bounds = cv.boundingRect(int_labels)
+        if higher_bound and not lower_bound:
+            lower_bound = p + (p - higher_bound)
+        elif lower_bound and not higher_bound:
+            higher_bound = p + (p - lower_bound)
+
+        # extend bounds of strip slightly away from peak location, for safety (diacritics, etc)
+        lower_bound -= int((p - lower_bound) * widen_strips_factor)
+        higher_bound += int((higher_bound - p) * widen_strips_factor)
+
+        # tighten up strip by finding bounding box around contents
+        mask = np.zeros(img.shape, np.uint8)
+        mask[lower_bound:higher_bound, :] = 255 - img[lower_bound:higher_bound, :]
+        strip_bounds = cv.boundingRect(mask)
+
         line_strips.append(strip_bounds)
 
     return line_strips, peak_locations, smoothed_projection
@@ -232,10 +239,10 @@ if __name__ == '__main__':
     import numpy as np
     import cv2 as cv
 
-    fnames = ['salzinnes_378']
+    fnames = ['salzinnes_378', 'salzinnes_222', 'salzinnes_315', 'salzinnes_160']
 
     for fname in fnames:
-        # print(f'processing {fname}...')
+        print('processing {}...'.format(fname))
         raw_image = cv.imread('./png/{}_text.png'.format(fname))
 
         img_bin, img_eroded, angle = preprocess_images(raw_image, soften=soften_amt, fill_holes=3)
@@ -248,5 +255,12 @@ if __name__ == '__main__':
     # plt.clf()
     # plt.plot(proj)
     # for x in lines_peak_locs:
+    #     plt.axvline(x=x, linestyle=':')
+    # plt.show()
+    #
+    # diff_proj_peaks = find_peak_locations(np.abs(np.diff(proj)))
+    # plt.clf()
+    # plt.plot(np.diff(proj))
+    # for x in diff_proj_peaks:
     #     plt.axvline(x=x, linestyle=':')
     # plt.show()
