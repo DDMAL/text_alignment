@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 try:
     from calamari_ocr.ocr.predictor import Predictor
 except ImportError:

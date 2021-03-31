@@ -1,5 +1,5 @@
 import numpy as np
-from unidecode import unidecode
+# from unidecode import unidecode
 from functools import partial
 
 # scoring system; these were the optimal weights found by grid search. different scoring methods

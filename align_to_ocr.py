@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-
-# import gamera.core as gc
-# gc.init_gamera()
-# from gamera.plugins.image_utilities import union_images
 import matplotlib.pyplot as plt
 import image_preprocessing as preproc
 import os

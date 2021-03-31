@@ -1,5 +1,4 @@
 from rodan.jobs.base import RodanTask
-import gamera.core as gc
 import json
 import align_to_ocr as align
 from celery.utils.log import get_task_logger
