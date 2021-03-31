@@ -1,4 +1,7 @@
-from calamari_ocr.ocr.predictor import Predictor
+try:
+    from calamari_ocr.ocr.predictor import Predictor
+except ImportError:
+    print('Calamari OCR failed to import. This is normal only when loading Rodan.')
 import cv2 as cv
 
 abbreviations = {
@@ -13,6 +16,7 @@ abbreviations = {
     u'ū': ['um'],
     u'ō': ['om']
 }
+
 
 class CharBox(object):
     __slots__ = ['char', 'ul', 'lr', 'ulx', 'lrx', 'uly', 'lry', 'width', 'height']
@@ -43,7 +47,7 @@ class CharBox(object):
 def clean_special_chars(inp):
     '''
     removes some special characters from OCR output. ideally these would be useful but not clear how
-    best to integrate them into the alignment algorithm. unidecode doesn't seem like these either
+    best to integrate them into the alignment algorithm.
     '''
     inp = inp.replace('~', '')
     # inp = inp.replace('\xc4\x81', 'a')
@@ -118,7 +122,7 @@ def handle_abbreviations(all_chars, max_iters=10e4):
 
 if __name__ == '__main__':
 
-    import textAlignPreprocessing as preproc
+    import image_preprocessing as preproc
 
     fname = 'salzinnes_378'
     raw_image = cv.imread('./png/{}_text.png'.format(fname))
