@@ -59,7 +59,10 @@ def clean_special_chars(inp):
 
 
 def recognize_text_strips(img, line_strips, path_to_ocr_model, verbose=False):
-
+    '''
+    takes in an image and a list of bounding boxes around text strips, extracts these strips, and
+    performs OCR on the resulting set of strips. returns results character-by-character within CharBoxes.
+    '''
     predictor = Predictor(checkpoint=path_to_ocr_model)
     img_white_back = (1 - img).astype(float)
 
@@ -69,8 +72,6 @@ def recognize_text_strips(img, line_strips, path_to_ocr_model, verbose=False):
         x, y, w, h = ls
         strip = img_white_back[y:y + h, x:x + w]
         strips.append(strip)
-
-    print([x.shape for x in strips])
 
     results = []
     for r in predictor.predict_raw(strips, progress_bar=verbose):
@@ -99,7 +100,10 @@ def recognize_text_strips(img, line_strips, path_to_ocr_model, verbose=False):
 
 
 def handle_abbreviations(all_chars, max_iters=10e4):
-    # replace abbreviations found in the ocr (e.g. dns -> do mi nus)
+    '''
+    replace abbreviations found in the ocr with their expanded forms so they can be matched to the
+    original text, when found (e.g. dns -> do mi nus)
+    '''
     for abb in abbreviations.keys():
         iter = 0
         while True:
