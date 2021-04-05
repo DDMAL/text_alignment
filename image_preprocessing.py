@@ -134,18 +134,18 @@ def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes):
     '''
 
     gray_img = rgb2gray(input_image)
-    blur = gaussian(gray_img, soften)
-    thresh = threshold_otsu(blur)
-    img_bin = blur < thresh
+    thresh = threshold_otsu(gray_img)
+    img_bin = gray_img < thresh
+    img_blur_bin = gaussian(gray_img, soften) < thresh
 
     kernel = np.ones((fill_holes, fill_holes), np.uint8)
-    img_cleaned = binary_opening(binary_closing(img_bin, kernel), kernel)
+    img_cleaned = binary_opening(binary_closing(img_blur_bin, kernel), kernel)
 
     angle = find_rotation_angle(img_cleaned)
-    img_rotated = rotate(img_cleaned, -1 * angle, order=0, mode='edge')
-    img_rotated = (img_rotated > 0)
+    img_cleaned_rot = rotate(img_cleaned, angle, order=0, mode='edge') > 0
+    img_bin_rot = rotate(img_bin, angle, order=0, mode='edge') > 0
 
-    return img_bin, img_rotated, angle
+    return img_bin_rot, img_cleaned_rot, angle
 
 
 def identify_text_lines(img, widen_strips_factor=1):
@@ -205,7 +205,7 @@ def identify_text_lines(img, widen_strips_factor=1):
 
 
 def save_preproc_image(image, line_strips, lines_peak_locs, fname):
-    im = Image.fromarray(image)
+    im = Image.fromarray((1 - image.astype('uint8')) * 255)
 
     text_size = 70
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
@@ -226,7 +226,7 @@ def save_preproc_image(image, line_strips, lines_peak_locs, fname):
     im.save('test_preproc_{}.png'.format(fname))
 
 
-def find_rotation_angle(img, coarse_bound=2, fine_bound=0.2, rescale_amt=0.5):
+def find_rotation_angle(img, coarse_bound=3, fine_bound=0.1, rescale_amt=0.5):
     # find most likely angle of rotation in two-step refining process
     # similar process in gamera, see the paper:
     # "Optical recognition of psaltic Byzantine chant notation" by Dalitz. et al (2008)
@@ -244,7 +244,6 @@ def find_rotation_angle(img, coarse_bound=2, fine_bound=0.2, rescale_amt=0.5):
             if variation > highest_variation:
                 highest_variation = variation
                 best_angle = a
-
         return best_angle
 
     angles_to_try = np.linspace(-coarse_bound, coarse_bound, num_trials)
@@ -261,17 +260,17 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
     import numpy as np
 
-    indices = [101] # [25, 34, 51, 65, 87, 152, 249, 295, 301, 343, 310, 412]
+    indices = [101, 25, 34, 51, 65, 87, 152, 249, 295, 301, 343, 310, 412]
     fnames = ['salzinnes_{:03}'.format(x) for x in indices]
 
     for fname in fnames:
         print('processing {}...'.format(fname))
         input_image = io.imread('./png/{}_text.png'.format(fname))
 
-        img_bin, img_rotated, angle = preprocess_images(input_image, soften=soften_amt, fill_holes=3)
+        img_bin, img_eroded, angle = preprocess_images(input_image, soften=soften_amt, fill_holes=3)
         # cv.imwrite('test.png', img_eroded)
 
-        line_strips, lines_peak_locs, proj = identify_text_lines(img_rotated)
+        line_strips, lines_peak_locs, proj = identify_text_lines(img_eroded)
         save_preproc_image(img_bin, line_strips, lines_peak_locs, fname)
 
     # plt.clf()
