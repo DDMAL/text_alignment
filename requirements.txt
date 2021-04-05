@@ -2,4 +2,3 @@ Unidecode==1.0.22
 numpy>=1.15.1
 scikit-image==0.15.0
 calamari-ocr==1.0.5
-opencv-python>=4.0.0
