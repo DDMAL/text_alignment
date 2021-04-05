@@ -5,7 +5,11 @@ import pickle
 import itertools as iter
 import os
 import re
-import cv2 as cv
+from skimage import io
+from skimage.color import rgb2gray
+from skimage.filters import gaussian, threshold_otsu
+from skimage.morphology import binary_opening, binary_closing
+from skimage.transform import rescale, rotate
 
 
 # PARAMETERS FOR PREPROCESSING
@@ -129,19 +133,17 @@ def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes):
     Perform some softening / erosion / binarization on the text layer
     '''
 
-    gray_img = cv.cvtColor(input_image, cv.COLOR_BGR2GRAY)
-
-    blur = cv.GaussianBlur(gray_img, (soften, soften), 0)
-    ret3, img_bin = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)
+    gray_img = rgb2gray(input_image)
+    blur = gaussian(gray_img, soften)
+    thresh = threshold_otsu(blur)
+    img_bin = blur < thresh
 
     kernel = np.ones((fill_holes, fill_holes), np.uint8)
-    cl = cv.morphologyEx(img_bin, cv.MORPH_CLOSE, kernel)
-    img_eroded = cv.morphologyEx(cl, cv.MORPH_OPEN, kernel)
+    img_cleaned = binary_opening(binary_closing(img_bin, kernel), kernel)
 
-    angle = find_rotation_angle(img_eroded)
-    img_rotated = rotate_image(img_eroded, -1 * angle, white_background=True)
-
-    line_strips, lines_peak_locs, proj = identify_text_lines(img_rotated)
+    angle = find_rotation_angle(img_cleaned)
+    img_rotated = rotate(img_cleaned, -1 * angle, order=0, mode='edge')
+    img_rotated = (img_rotated > 0)
 
     return img_bin, img_rotated, angle
 
@@ -157,7 +159,7 @@ def identify_text_lines(img, widen_strips_factor=1):
     '''
 
     # compute y-axis projection of input image and filter with sliding window average
-    project = np.clip(255 - img, 0, 1).sum(1)
+    project = np.clip(img, 0, 1).sum(1)
     smoothed_projection = moving_avg_filter(project, filter_size)
 
     # calculate normalized log prominence of all peaks in projection
@@ -186,10 +188,14 @@ def identify_text_lines(img, widen_strips_factor=1):
 
         # tighten up strip by finding bounding box around contents
         mask = np.zeros(img.shape, np.uint8)
-        mask[lower_bound:higher_bound, :] = 255 - img[lower_bound:higher_bound, :]
-        strip_bounds = cv.boundingRect(mask)
+        mask[lower_bound:higher_bound, :] = img[lower_bound:higher_bound, :]
 
-        line_strips.append(strip_bounds)
+        hz_proj = mask.sum(0).nonzero()[0]
+        vt_proj = mask.sum(1).nonzero()[0]
+        x, y = hz_proj[0], vt_proj[0]
+        w, h = hz_proj[-1] - x, vt_proj[-1] - y
+
+        line_strips.append((x, y, w, h))
 
     # go back and check to make sure this process didn't fail. if it did, we'll have bounding
     # boxes at [0, 0, 0, 0]. as a failsafe, use the median height of other bounding boxes
@@ -220,29 +226,19 @@ def save_preproc_image(image, line_strips, lines_peak_locs, fname):
     im.save('test_preproc_{}.png'.format(fname))
 
 
-def rotate_image(image, angle, white_background=False):
-    border = (255, 255, 255) if white_background else None
-    image_center = tuple(np.array(image.shape[1::-1]) / 2)
-    rot_mat = cv.getRotationMatrix2D(image_center, angle, 1.0)
-    img_rot = cv.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv.INTER_LINEAR, borderValue=border)
-    return img_rot
-
-
-def find_rotation_angle(img, coarse_bound=2, fine_bound=0.1):
+def find_rotation_angle(img, coarse_bound=2, fine_bound=0.2, rescale_amt=0.5):
     # find most likely angle of rotation in two-step refining process
-    # similar process in gamera, see the paper
+    # similar process in gamera, see the paper:
     # "Optical recognition of psaltic Byzantine chant notation" by Dalitz. et al (2008)
 
     num_trials = int(coarse_bound / fine_bound)
-    img_invert = 255 - img
-    dim = tuple(np.array(img.shape) // 2)
-    img_resized = cv.resize(img_invert, dim, interpolation=cv.INTER_AREA)
+    img_resized = rescale(img, rescale_amt, order=0, multichannel=False)
 
     def project_angles(img_to_project, angles_to_try):
         best_angle = 0
         highest_variation = 0
         for a in angles_to_try:
-            rot_img = rotate_image(img_to_project, a)
+            rot_img = rotate(img_to_project, a, mode='edge')
             proj = np.sum(rot_img, 1).astype('int64')
             variation = np.sum(np.diff(proj) ** 2)
             if variation > highest_variation:
@@ -264,16 +260,15 @@ if __name__ == '__main__':
     from PIL import Image, ImageDraw, ImageFont
     from matplotlib import pyplot as plt
     import numpy as np
-    import cv2 as cv
 
     indices = [101] # [25, 34, 51, 65, 87, 152, 249, 295, 301, 343, 310, 412]
     fnames = ['salzinnes_{:03}'.format(x) for x in indices]
 
     for fname in fnames:
         print('processing {}...'.format(fname))
-        raw_image = cv.imread('./png/{}_text.png'.format(fname))
+        input_image = io.imread('./png/{}_text.png'.format(fname))
 
-        img_bin, img_rotated, angle = preprocess_images(raw_image, soften=soften_amt, fill_holes=3)
+        img_bin, img_rotated, angle = preprocess_images(input_image, soften=soften_amt, fill_holes=3)
         # cv.imwrite('test.png', img_eroded)
 
         line_strips, lines_peak_locs, proj = identify_text_lines(img_rotated)
