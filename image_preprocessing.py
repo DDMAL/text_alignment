@@ -13,19 +13,12 @@ from skimage.transform import rescale, rotate
 
 
 # PARAMETERS FOR PREPROCESSING
-saturation_thresh = 0.9
-sat_area_thresh = 150
 soften_amt = 5          # size of gaussian blur to apply before taking threshold
 fill_holes = 5          # size of kernel used for morphological operations when despeckling
 
 # PARAMETERS FOR TEXT LINE SEGMENTATION
 filter_size = 30                # size of moving-average filter used to smooth projection
 prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
-
-# CC GROUPING (BLOBS)
-cc_group_gap_min = 20  # any gap at least this wide will be assumed to be a space between words!
-max_distance_to_staff = 200
-
 
 def calculate_peak_prominence(data, index):
     '''
