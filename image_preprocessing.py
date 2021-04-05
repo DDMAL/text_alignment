@@ -130,7 +130,9 @@ def moving_avg_filter(data, filter_size=filter_size):
 
 def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes):
     '''
-    Perform some softening / erosion / binarization on the text layer
+    Perform some softening / erosion / binarization on the text layer. Additionally, finds the
+    optimal angle for rotation and returns a "cleaned" rotated version along with a raw, binarized
+    rotated version.
     '''
 
     gray_img = rgb2gray(input_image)
@@ -152,10 +154,11 @@ def identify_text_lines(img, widen_strips_factor=1):
     '''
     finds text lines on preprocessed image. step-by-step:
     1. find peak locations of vertical projection
-    2. draw horizontal white lines between peak locations to make totally sure that lines are
-        unconnected (ornamental letters can often touch the line above them)
-    3. connected component analysis
-    4. break into neat rows of connected components that each intersect the same horizontal line
+    2. find peak locations of derivative of vertical projection (so, rows where the number of black
+    pixels is changing very rapidly, moving down the page)
+    3. from every peak found in step 1, associate it with its neighboring peaks found in part 2,
+    from above and below.
+    4. take a tight bounding box around all content found between two derivative-peaks.
     '''
 
     # compute y-axis projection of input image and filter with sliding window average
@@ -227,9 +230,11 @@ def save_preproc_image(image, line_strips, lines_peak_locs, fname):
 
 
 def find_rotation_angle(img, coarse_bound=3, fine_bound=0.1, rescale_amt=0.5):
-    # find most likely angle of rotation in two-step refining process
-    # similar process in gamera, see the paper:
-    # "Optical recognition of psaltic Byzantine chant notation" by Dalitz. et al (2008)
+    '''
+    find most likely angle of rotation in two-step refining process
+    similar process in gamera, see the paper:
+    "Optical recognition of psaltic Byzantine chant notation" by Dalitz. et al (2008)
+    '''
 
     num_trials = int(coarse_bound / fine_bound)
     img_resized = rescale(img, rescale_amt, order=0, multichannel=False)
@@ -268,7 +273,7 @@ if __name__ == '__main__':
         input_image = io.imread('./png/{}_text.png'.format(fname))
 
         img_bin, img_eroded, angle = preprocess_images(input_image, soften=soften_amt, fill_holes=3)
-        # cv.imwrite('test.png', img_eroded)
+        # io.imsave('test.png', img_eroded)
 
         line_strips, lines_peak_locs, proj = identify_text_lines(img_eroded)
         save_preproc_image(img_bin, line_strips, lines_peak_locs, fname)
