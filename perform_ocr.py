@@ -3,7 +3,6 @@ try:
     from calamari_ocr.ocr.predictor import Predictor
 except ImportError:
     print('Calamari OCR failed to import. This is normal only when loading Rodan.')
-import cv2 as cv
 
 abbreviations = {
     u'dns': ['do', 'mi', 'nus'],
@@ -59,17 +58,19 @@ def clean_special_chars(inp):
     return inp
 
 
-def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=False):
+def recognize_text_strips(img, line_strips, path_to_ocr_model, verbose=False):
 
     predictor = Predictor(checkpoint=path_to_ocr_model)
+    img_white_back = (1 - img).astype(float)
 
     # x, y, width, height
     strips = []
-    for ls in cc_strips:
+    for ls in line_strips:
         x, y, w, h = ls
-        # WHY IS Y FIRST? WHAT'S THE DEAL
-        strip = img[y:y + h, x:x + w]
+        strip = img_white_back[y:y + h, x:x + w]
         strips.append(strip)
+
+    print([x.shape for x in strips])
 
     results = []
     for r in predictor.predict_raw(strips, progress_bar=verbose):
@@ -78,7 +79,7 @@ def recognize_text_strips(img, cc_strips, path_to_ocr_model, verbose=False):
     all_chars = []
 
     # iterate over results and make charbox objects out of every character
-    for i, cs in enumerate(cc_strips):
+    for i, cs in enumerate(line_strips):
 
         strip_x_min, strip_y_min, strip_width, strip_height = cs
         res_line = [
@@ -124,9 +125,10 @@ def handle_abbreviations(all_chars, max_iters=10e4):
 if __name__ == '__main__':
 
     import image_preprocessing as preproc
+    from skimage import io
 
     fname = 'salzinnes_378'
-    raw_image = cv.imread('./png/{}_text.png'.format(fname))
+    raw_image = io.imread('./png/{}_text.png'.format(fname))
 
     img_bin, img_eroded, angle = preproc.preprocess_images(raw_image)
     line_strips, lines_peak_locs, proj = preproc.identify_text_lines(img_eroded)

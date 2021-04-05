@@ -9,8 +9,7 @@ import latin_syllabification as latsyl
 import subprocess
 import json
 import re
-import io
-import cv2 as cv
+from skimage import io
 import perform_ocr
 
 median_line_mult = 2
@@ -258,7 +257,7 @@ if __name__ == '__main__':
             continue
 
         print('processing {}...'.format(fname))
-        raw_image = cv.imread('./png/{}_text.png'.format(fname))
+        raw_image = io.imread('./png/{}_text.png'.format(fname))
 
         existing_ocr = None
         # if ocr_pickle:
