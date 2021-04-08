@@ -20,6 +20,7 @@ fill_holes = 5          # size of kernel used for morphological operations when 
 filter_size = 30                # size of moving-average filter used to smooth projection
 prominence_tolerance = 0.70     # log-projection peaks must be at least this prominent
 
+
 def calculate_peak_prominence(data, index):
     '''
     returns the log of the prominence of the peak at a given index in a given dataset. peak

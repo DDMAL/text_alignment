@@ -1,7 +1,7 @@
 from rodan.jobs.base import RodanTask
 import json
 from celery.utils.log import get_task_logger
-import align_to_ocr as align
+from . import align_to_ocr as align
 
 
 class text_alignment(RodanTask):
