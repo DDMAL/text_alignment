@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
-import image_preprocessing as preproc
 import os
 import shutil
 import numpy as np
-import affine_needleman_wunsch as afw
-import latin_syllabification as latsyl
 import subprocess
 import json
 import re
 from skimage import io
-import perform_ocr
+
+try:
+    from . import affine_needleman_wunsch as afw
+    from . import latin_syllabification as latsyl
+    from . import perform_ocr
+    from . import image_preprocessing as preproc
+except (ImportError, SystemError):
+    import affine_needleman_wunsch as afw
+    import latin_syllabification as latsyl
+    import perform_ocr
+    import image_preprocessing as preproc
 
 median_line_mult = 2
 

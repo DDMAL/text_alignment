@@ -2,6 +2,7 @@ from rodan.jobs.base import RodanTask
 import json
 from celery.utils.log import get_task_logger
 from . import align_to_ocr as align
+from skimage import io
 
 
 class text_alignment(RodanTask):
@@ -53,13 +54,11 @@ class text_alignment(RodanTask):
         self.logger.info(settings)
 
         transcript = align.read_file(inputs['Transcript'][0]['resource_path'])
-        raw_image = gc.load_image(inputs['Text Layer'][0]['resource_path'])
+        raw_image = io.imread(inputs['Text Layer'][0]['resource_path'])
         model_path = inputs['OCR Model'][0]['resource_path']
 
         self.logger.info('processing image...')
-        id = 'wkdir'
-        result = align.process(raw_image, transcript, model_path,
-            wkdir_name='ocr_{}'.format(id))
+        result = align.process(raw_image, transcript, model_path)
         syl_boxes, _, lines_peak_locs, _ = result
 
         self.logger.info('writing output to json...')
