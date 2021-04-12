@@ -3,6 +3,7 @@ import json
 from celery.utils.log import get_task_logger
 from . import align_to_ocr as align
 from skimage import io
+import os
 
 
 class text_alignment(RodanTask):
@@ -57,8 +58,15 @@ class text_alignment(RodanTask):
         raw_image = io.imread(inputs['Text Layer'][0]['resource_path'])
         model_path = inputs['OCR Model'][0]['resource_path']
 
+        # forgive me for this hack, but calamari v1.0 requires the .json extension. we should
+        # upgrade to python 3.7 when we can so this is not necessary
+
         self.logger.info('processing image...')
-        result = align.process(raw_image, transcript, model_path)
+        model_path_rename = inputs['OCR Model'][0]['resource_path'] + '.json'
+        os.rename(model_path, model_path_rename)
+        result = align.process(raw_image, transcript, model_path_rename)
+        os.rename(model_path_rename, model_path)
+
         syl_boxes, _, lines_peak_locs, _ = result
 
         self.logger.info('writing output to json...')

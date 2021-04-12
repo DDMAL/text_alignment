@@ -229,7 +229,7 @@ if __name__ == '__main__':
     text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     manuscript = 'salzinnes'
     f_inds = ['040r', '142v', '087r', '132v']
-    ocr_model = './models/mcgill_salzinnes/1.ckpt'
+    ocr_model = './models/salzinnes-gothic-2019'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
     # manuscript = 'einsiedeln'
