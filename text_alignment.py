@@ -3,8 +3,6 @@ import json
 from celery.utils.log import get_task_logger
 from . import align_to_ocr as align
 from skimage import io
-import os
-
 
 class text_alignment(RodanTask):
     name = 'Text Alignment'
@@ -19,6 +17,15 @@ class text_alignment(RodanTask):
         'title': 'Text Alignment Settings',
         'type': 'object',
         'job_queue': 'Python3',
+        'properties': {
+            'OCR Model': {
+                'type': 'string',
+                'enum': ['salzinnes-gothic-2019', 'stgall-carolingian-2019'],
+                'default': 'salzinnes-gothic-2019',
+                'description': ('The OCR model used to obtain a \'messy\' transcript, which will '
+                                'then be aligned to the given transcript.')
+            }
+        }
     }
 
     input_port_types = [{
@@ -30,12 +37,6 @@ class text_alignment(RodanTask):
     }, {
         'name': 'Transcript',
         'resource_types': ['text/plain'],
-        'minimum': 1,
-        'maximum': 1,
-        'is_list': False
-    }, {
-        'name': 'OCR Model',
-        'resource_types': ['application/ocropus+pyrnn'],
         'minimum': 1,
         'maximum': 1,
         'is_list': False
@@ -56,16 +57,10 @@ class text_alignment(RodanTask):
 
         transcript = align.read_file(inputs['Transcript'][0]['resource_path'])
         raw_image = io.imread(inputs['Text Layer'][0]['resource_path'])
-        model_path = inputs['OCR Model'][0]['resource_path']
-
-        # forgive me for this hack, but calamari v1.0 requires the .json extension. we should
-        # upgrade to python 3.7 when we can so this is not necessary
+        model_name = settings['Connected component size']
 
         self.logger.info('processing image...')
-        model_path_rename = inputs['OCR Model'][0]['resource_path'] + '.json'
-        os.rename(model_path, model_path_rename)
-        result = align.process(raw_image, transcript, model_path_rename)
-        os.rename(model_path_rename, model_path)
+        result = align.process(raw_image, transcript, model_name)
 
         syl_boxes, _, lines_peak_locs, _ = result
 

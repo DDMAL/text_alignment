@@ -46,23 +46,16 @@ def rotate_bbox(cbox, angle, pivot, radians=False):
     s = np.sin(angle)
     c = np.cos(angle)
 
-    # move to origin
-    old_ulx = cbox.ulx #- px
-    old_uly = cbox.uly #- py
-    old_lrx = cbox.lrx #- px
-    old_lry = cbox.lry #- py
+    old_ulx = cbox.ulx
+    old_uly = cbox.uly
+    old_lrx = cbox.lrx
+    old_lry = cbox.lry
 
     # rotate using a 2d rotation matrix
     new_ulx = (old_ulx * c) - (old_uly * s)
     new_uly = (old_ulx * s) + (old_uly * c)
     new_lrx = (old_lrx * c) - (old_lry * s)
     new_lry = (old_lrx * s) + (old_lry * c)
-
-    # move back to original position
-    # new_ulx += (px - dx)
-    # new_uly += (py - dy)
-    # new_lrx += (px - dx)
-    # new_lry += (py - dy)
 
     new_ul = np.round([new_ulx, new_uly]).astype('int16')
     new_lr = np.round([new_lrx, new_lry]).astype('int16')
@@ -72,7 +65,7 @@ def rotate_bbox(cbox, angle, pivot, radians=False):
 
 def process(raw_image,
             transcript,
-            ocr_model,
+            ocr_model_name,
             seq_align_params={},
             median_line_mult=median_line_mult,
             existing_ocr=None,
@@ -92,7 +85,7 @@ def process(raw_image,
 
     all_chars = existing_ocr
     if not all_chars:
-        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocr_model, verbose)
+        all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocr_model_name, verbose)
     all_chars = perform_ocr.handle_abbreviations(all_chars)
 
     # -- PERFORM AND PARSE ALIGNMENT --
@@ -229,7 +222,7 @@ if __name__ == '__main__':
     text_func = pcc.filename_to_text_func('./csv/123723_Salzinnes.csv', './csv/mapping.csv')
     manuscript = 'salzinnes'
     f_inds = ['040r', '142v', '087r', '132v']
-    ocr_model = './models/salzinnes-gothic-2019'
+    ocr_model = 'salzinnes-gothic-2019'
 
     # text_func = pcc.filename_to_text_func('./csv/einsiedeln_123606.csv')
     # manuscript = 'einsiedeln'

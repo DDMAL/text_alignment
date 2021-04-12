@@ -3,6 +3,8 @@ try:
     from calamari_ocr.ocr.predictor import Predictor
 except ImportError:
     print('Calamari OCR failed to import. This is normal only when loading Rodan.')
+import os
+
 
 abbreviations = {
     u'dns': ['do', 'mi', 'nus'],
@@ -58,12 +60,16 @@ def clean_special_chars(inp):
     return inp
 
 
-def recognize_text_strips(img, line_strips, path_to_ocr_model, verbose=False):
+def recognize_text_strips(img, line_strips, ocr_model_name, verbose=False):
     '''
     takes in an image and a list of bounding boxes around text strips, extracts these strips, and
     performs OCR on the resulting set of strips. returns results character-by-character within CharBoxes.
     '''
-    predictor = Predictor(checkpoint=path_to_ocr_model)
+
+    dir = os.path.dirname(__file__)
+    ocr_model_path = os.path.join(dir, 'models/{}'.format(ocr_model_name))
+
+    predictor = Predictor(checkpoint=ocr_model_path)
     img_white_back = (1 - img).astype(float)
 
     # x, y, width, height
@@ -137,7 +143,7 @@ if __name__ == '__main__':
     img_bin, img_eroded, angle = preproc.preprocess_images(raw_image)
     line_strips, lines_peak_locs, proj = preproc.identify_text_lines(img_eroded)
 
-    path_to_ocr_model = './models/mcgill_salzinnes/1.ckpt'
+    ocr_model_name = 'salzinnes-gothic-2019'
 
-    all_chars = recognize_text_strips(img_bin, line_strips, path_to_ocr_model, True)
+    all_chars = recognize_text_strips(img_bin, line_strips, ocr_model_name, True)
     all_chars = handle_abbreviations(all_chars, max_iters=10e4)
