@@ -4,6 +4,7 @@ from celery.utils.log import get_task_logger
 from . import align_to_ocr as align
 from skimage import io
 
+
 class text_alignment(RodanTask):
     name = 'Text Alignment'
     author = 'Timothy de Reuse'

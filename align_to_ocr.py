@@ -79,27 +79,26 @@ def process(raw_image,
     cc_strips, lines_peak_locs, _ = preproc.identify_text_lines(eroded)
 
     # -- PERFORM OCR WITH CALAMARI --
-
     all_chars = existing_ocr
     if not all_chars:
         all_chars = perform_ocr.recognize_text_strips(image, cc_strips, ocr_model_name, verbose)
     all_chars = perform_ocr.handle_abbreviations(all_chars)
 
     # -- PERFORM AND PARSE ALIGNMENT --
-    # get full ocr transcript
+    # get full ocr transcript as CharBoxes
     ocr = ''.join(x.char for x in all_chars)
     all_chars_copy = list(all_chars)
 
     # remove special characters, but maintain case
     transcript = latsyl.clean_transcript(transcript)
 
+    # affine_needleman_wunsch alignment between OCR and transcript
     print('performing alignment...')
     tra_align, ocr_align, _ = afw.perform_alignment(
         transcript=list(transcript),
         ocr=list(ocr),
         **seq_align_params
         )
-
     tra_align = ''.join(tra_align)
     ocr_align = ''.join(ocr_align)
 
@@ -183,7 +182,10 @@ def to_JSON_dict(syl_boxes, lines_peak_locs):
     return data
 
 
-def draw_results_on_page(image, syl_boxes, lines_peak_locs):
+def draw_results_on_page(image, syl_boxes, lines_peak_locs, fname=''):
+    '''
+    draws a list of char_boxes on a given image and saves the image to file (local dev use only).
+    '''
     im = Image.fromarray(image)
     text_size = im.size[1] // 70
     fnt = ImageFont.truetype('FreeMono.ttf', text_size)
