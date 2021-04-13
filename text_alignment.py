@@ -7,7 +7,10 @@ from skimage import io
 class text_alignment(RodanTask):
     name = 'Text Alignment'
     author = 'Timothy de Reuse'
-    description = 'Given a text layer image and plaintext of some text on that page, finds the'
+    description = ('Given a text layer image and a transcript of some text on that page, finds the '
+                   'positions of each syllable of text in the transcript on the image. See: '
+                   'de Reuse and Fujinaga, "Robust Transcript Alignment on Medieval Chant Manuscripts,"'
+                   'in Proceedings of the 2nd International Workshop on Reading Music Systems, 2019')
     enabled = True
     category = 'text'
     interactive = False
