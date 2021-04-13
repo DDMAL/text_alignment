@@ -69,7 +69,7 @@ def recognize_text_strips(img, line_strips, ocr_model_name, verbose=False):
     dir = os.path.dirname(__file__)
     ocr_model_path = os.path.join(dir, 'models/{}'.format(ocr_model_name))
 
-    predictor = Predictor(checkpoint=ocr_model_path)
+    predictor = Predictor(checkpoint=ocr_model_path, processes=1)
     img_white_back = (1 - img).astype(float)
 
     # x, y, width, height
@@ -80,7 +80,7 @@ def recognize_text_strips(img, line_strips, ocr_model_name, verbose=False):
         strips.append(strip)
 
     results = []
-    for r in predictor.predict_raw(strips, progress_bar=verbose):
+    for r in predictor.predict_raw(strips, progress_bar=False):
         results.append(r)
 
     all_chars = []

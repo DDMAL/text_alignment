@@ -94,7 +94,7 @@ def process(raw_image,
     all_chars_copy = list(all_chars)
 
     # remove special characters, but maintain case
-    transcript = pcc.clean(transcript)
+    transcript = latsyl.clean_transcript(transcript)
 
     print('performing alignment...')
     tra_align, ocr_align, _ = afw.perform_alignment(

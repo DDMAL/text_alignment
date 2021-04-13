@@ -57,7 +57,8 @@ class text_alignment(RodanTask):
 
         transcript = align.read_file(inputs['Transcript'][0]['resource_path'])
         raw_image = io.imread(inputs['Text Layer'][0]['resource_path'])
-        model_name = settings['Connected component size']
+        ocr_model_enum = text_alignment.settings['properties']['OCR Model']['enum']
+        model_name = ocr_model_enum[settings['OCR Model']]
 
         self.logger.info('processing image...')
         result = align.process(raw_image, transcript, model_name)

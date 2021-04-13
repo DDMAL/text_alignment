@@ -11,6 +11,17 @@ diphthongs += [x[0].upper() + x[1:] for x in diphthongs]
 vowels += [x[0].upper() + x[1:] for x in vowels]
 
 
+def clean_transcript(text):
+    # remove all character that are not letters or whitespace
+    text = re.sub(r"[^\s\w|]", "", text)
+    text = re.sub(r" \| ", " ", text)
+    # change all runs of consecutive spaces to single spaces
+    text = re.sub(r" +", " ", text)
+    # convert to lowercase
+    # text = text.lower()
+    return text
+
+
 def syllabify_word(inp, verbose=False):
     '''
     separate each word into UNITS - first isolate consonant groups, then diphthongs, then letters.
