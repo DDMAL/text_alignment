@@ -19,8 +19,6 @@ except (ImportError, SystemError):
     import perform_ocr
     import image_preprocessing as preproc
 
-median_line_mult = 2
-
 
 def read_file(fname):
     '''
@@ -67,7 +65,6 @@ def process(raw_image,
             transcript,
             ocr_model_name,
             seq_align_params={},
-            median_line_mult=median_line_mult,
             existing_ocr=None,
             verbose=True):
     '''
