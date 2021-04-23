@@ -20,7 +20,7 @@ class text_alignment(RodanTask):
     settings = {
         'title': 'Text Alignment Settings',
         'type': 'object',
-        'job_queue': 'Python3',
+        'job_queue': 'GPU',
         'properties': {
             'OCR Model': {
                 'type': 'string',
