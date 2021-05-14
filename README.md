@@ -50,4 +50,4 @@ median_line_spacing: [median space between adjacent text lines, in pixels]
 
 Calamari has a command-line interface for training models. What you need is a list of text-lines, in `png` format, and a bunch of accompanying `.txt` files, each of which has the ground-truth text for the corresponding text line. Further information, and the exact commands necessary: [OCRopus getting started guide](https://github.com/Calamari-OCR/calamari)
 
- You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For Salzinnes, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was perfectly sufficient.
+ You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For the Salzinnes manuscript, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was perfectly sufficient.
