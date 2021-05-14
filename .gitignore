@@ -1,5 +1,5 @@
 *.rng
-*.json
+out_json/*
 pip-selfcheck*
 gamera-3.4.3*
 CF-*
@@ -10,6 +10,7 @@ testspacing*
 wkdir_*/
 png/
 *.png
+*.jpg
 ./ocr_*/*
 .DS_Store
 alignenv/
@@ -19,6 +20,7 @@ pik/*
 ground-truth-alignments/*
 csv/*
 ocr*
+extra-models/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

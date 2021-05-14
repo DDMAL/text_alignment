@@ -1,14 +1,17 @@
 from rodan.jobs.base import RodanTask
-import gamera.core as gc
 import json
-import alignToOCR as align
 from celery.utils.log import get_task_logger
+from . import align_to_ocr as align
+from skimage import io
 
 
 class text_alignment(RodanTask):
     name = 'Text Alignment'
     author = 'Timothy de Reuse'
-    description = 'Given a text layer image and plaintext of some text on that page, finds the'
+    description = ('Given a text layer image and a transcript of some text on that page, finds the '
+                   'positions of each syllable of text in the transcript on the image. See: '
+                   'de Reuse and Fujinaga, "Robust Transcript Alignment on Medieval Chant Manuscripts,"'
+                   'in Proceedings of the 2nd International Workshop on Reading Music Systems, 2019')
     enabled = True
     category = 'text'
     interactive = False
@@ -17,7 +20,16 @@ class text_alignment(RodanTask):
     settings = {
         'title': 'Text Alignment Settings',
         'type': 'object',
-        'job_queue': 'Python2',
+        'job_queue': 'GPU',
+        'properties': {
+            'OCR Model': {
+                'type': 'string',
+                'enum': ['salzinnes-gothic-2019', 'stgall-carolingian-2019'],
+                'default': 'salzinnes-gothic-2019',
+                'description': ('The OCR model used to obtain a \'messy\' transcript, which will '
+                                'then be aligned to the given transcript.')
+            }
+        }
     }
 
     input_port_types = [{
@@ -29,12 +41,6 @@ class text_alignment(RodanTask):
     }, {
         'name': 'Transcript',
         'resource_types': ['text/plain'],
-        'minimum': 1,
-        'maximum': 1,
-        'is_list': False
-    }, {
-        'name': 'OCR Model',
-        'resource_types': ['application/ocropus+pyrnn'],
         'minimum': 1,
         'maximum': 1,
         'is_list': False
@@ -50,19 +56,17 @@ class text_alignment(RodanTask):
     }]
 
     def run_my_task(self, inputs, settings, outputs):
+
         self.logger.info(settings)
 
         transcript = align.read_file(inputs['Transcript'][0]['resource_path'])
-        raw_image = gc.load_image(inputs['Text Layer'][0]['resource_path'])
-        model_path = inputs['OCR Model'][0]['resource_path']
+        raw_image = io.imread(inputs['Text Layer'][0]['resource_path'])
+        ocr_model_enum = text_alignment.settings['properties']['OCR Model']['enum']
+        model_name = ocr_model_enum[settings['OCR Model']]
 
         self.logger.info('processing image...')
-        result = align.process(
-            raw_image=raw_image,
-            transcript=transcript,
-            ocropus_model=model_path,
-            wkdir_name='ocr_{}'.format('wkdir')
-        )
+        result = align.process(raw_image, transcript, model_name)
+
         syl_boxes, _, lines_peak_locs, _ = result
 
         self.logger.info('writing output to json...')

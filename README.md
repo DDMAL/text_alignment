@@ -4,11 +4,8 @@ Given an image of the text layer of a chant manuscript, and a transcript of text
 
 ### Installation
 
-Python 2.7+ only.
-Requires [Gamera](https://gamera.informatik.hsnr.de/) to be installed in the same environment.
-Requires [OCRopus](https://github.com/tmbdev/ocropy) as well. OCRopus is not an importable module but a set of command-line tools. Follow the installation instructions on their github. The important thing, whether installed globally or to a virtual environment, is that typing ```ocropy-rpred -h``` in a shell opened to the top-level folder of this project produces a help message.
+Python 3.5+ only. Currently requires Calamari 1.0.5, which is a slightly older version than current.
 
-OCRopus only supports Mac officially. I've gotten this project to work on Windows on my machine, since it only needs one component of OCRopus, but YMMV. On Windows, parallel processing doesn't work, and you might see a bunch of warnings pop up during the text recognition part.
 
 ### How To Run Locally
 Run from alignToOCR.py. Edit the parameters at the top of the ```__main__``` method to change what is processed.
@@ -17,11 +14,11 @@ Run from alignToOCR.py. Edit the parameters at the top of the ```__main__``` met
 
 ### Text Layer Preprocessing / Line Identification
 
-The input text layer can be pretty messy, so we need to clean it up a bit - this involves despeckling, and also removing narrow "runs," to try to break up letters that are connected to each other by skinny lines of noise. Then, the vertical position of each text line is found by finding the prominent peaks of a vertical projection. The assumption here is that every line is roughly parallel, and each line contains characters that are roughly the same height. Large ornamental letters are treated as noise, since OCRing them at this point would be too difficult. Lines are not assumed to have the same length.
+The input text layer can be  messy, so we need to clean it up a bit - this involves despeckling, and also removing narrow "runs," to try to break up letters that are connected to each other by skinny lines of noise. Then, the vertical position of each text line is found by finding the prominent peaks of a vertical projection. The assumption here is that every line is roughly parallel, and each line contains characters that are roughly the same height. Large ornamental letters are treated as noise, since OCRing them at this point would be too difficult. Lines are not assumed to have the same length.
 
 ### OCR with OCRopus
 
-OCRopus is not intended for use on handwritten text, but it gets a reasonably good result (~80% per-character accuracy on most pages of Salzinnes using the relatively simple model included with this repo). Each identified text line is saved to a file, and the OCRopus command line tool ```ocropus-rpred``` is used to attempt OCR on each one, retrieving the characters found within the line and the position of each one on the page.
+Calamari is not intended for use on handwritten text, but it gets a reasonably good result (~80% per-character accuracy on most pages of Salzinnes using the relatively simple model included with this repo). Each identified text line is saved to a file, and Calamari is used to attempt OCR on each one, retrieving the characters found within the line and the position of each one on the page.
 
 ### Aligning OCR with Correct Transcript
 
@@ -49,8 +46,8 @@ syl_boxes:[{
 median_line_spacing: [median space between adjacent text lines, in pixels]
 ```
 
-# Training a New OCRopus model
+# Training a New Calamari model
 
-Use ocropus's built-in page segmentation tools to generate a set of text lines from manuscript data. Then use ```ocropus-gtedit``` to create a ```temp-correction.html``` file - then you can start manually transcribing each text line. You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For Salzinnes, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was perfectly sufficient. Once you've transcribed enough, use ```ocropus-gtedit extract temp-correction.html``` to extract the information in the file and the ```ocropus-rtrain``` tool to train a model on the extracted data. You may want to explicitly specify a custom character set if your model uses a lot of special characters, or if there's many characters that you know for a fact are never used in the model.
+Calamari has a command-line interface for training models. What you need is a list of text-lines, in `png` format, and a bunch of accompanying `.txt` files, each of which has the ground-truth text for the corresponding text line. Further information, and the exact commands necessary: [OCRopus getting started guide](https://github.com/Calamari-OCR/calamari)
 
-Further information, and the exact commands necessary: [OCRopus getting started guide](https://github.com/digiah/oldOCR/blob/master/ocropy_getting_started.pdf)
+ You don't need to do _too_ many for text alignment to work correctly; 99% accuracy is overkill! For the Salzinnes manuscript, I transcribed about 40 pages, which took ~3 hours, and let it train for about 12 hours, and this was perfectly sufficient.

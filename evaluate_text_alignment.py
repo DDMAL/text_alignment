@@ -5,14 +5,12 @@ import xml.etree.ElementTree as ET
 import json
 import numpy as np
 import textAlignPreprocessing as preproc
-import gamera.core as gc
 import os
 import parse_cantus_csv as pcc
 import textSeqCompare as tsc
 import alignToOCR as atocr
 from itertools import product
 reload(atocr)
-gc.init_gamera()
 
 
 def intersect(bb1, bb2):
