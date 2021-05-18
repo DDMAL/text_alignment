@@ -1,8 +1,14 @@
 from rodan.jobs.base import RodanTask
 import json
 from celery.utils.log import get_task_logger
-from . import align_to_ocr as align
-from skimage import io
+
+# scikit-image, calamari-ocr may not be installed in the Rodan container. Rodan still needs
+# to run this file to register the job in the database, so this is a hack to avoid having to
+# add "dummy" packages to the rodan containe
+try:
+    from . import align_to_ocr as align
+except (SystemError, ImportError):
+    pass
 
 
 class text_alignment(RodanTask):
@@ -56,6 +62,7 @@ class text_alignment(RodanTask):
     }]
 
     def run_my_task(self, inputs, settings, outputs):
+        from skimage import io
 
         self.logger.info(settings)
 
