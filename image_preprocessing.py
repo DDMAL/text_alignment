@@ -127,18 +127,23 @@ def fill_corners(input_image):
     Checks each corner of the image to identify areas of black pixels. Converts such regions into white pixels to 
     enable peak location.
     '''
+    column = 0
+    maxCol = len(input_image[0]) 
+    maxRow = len(input_image) - 1
 
-    if not input_image[0, 0].all():
-        input_image = flood_fill(input_image, (0, 0), 255, tolerance = 10)
-    if not input_image[0, -1].all():
-        input_image = flood_fill(input_image, (0, -1), 255, tolerance = 10)
-    if not input_image[-1, 0].all():
-        input_image = flood_fill(input_image, (-1, 0), 255, tolerance = 10)
-    if not input_image[-1, -1].all():
-        input_image = flood_fill(input_image, (-1, -1), 255, tolerance = 10)
-    
+    while column < maxCol:
+        if input_image[0, column] == 0:
+            input_image = flood_fill(input_image, (0, column), 255)
+        column += 1
+
+    column = 0
+
+    while column < maxCol:
+        if input_image[maxRow, column] == 0:
+            input_image = flood_fill(input_image, (maxRow, column), 255)
+        column += 1
+
     return input_image
-
 
 def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes):
     '''
@@ -146,10 +151,7 @@ def preprocess_images(input_image, soften=soften_amt, fill_holes=fill_holes):
     optimal angle for rotation and returns a "cleaned" rotated version along with a raw, binarized
     rotated version.
     '''
-
-    input_image = fill_corners(input_image)
-
-    gray_img = rgb2gray(input_image)
+    gray_img = fill_corners(rgb2gray(input_image))
     thresh = threshold_otsu(gray_img)
     img_bin = gray_img < thresh
     img_blur_bin = gaussian(gray_img, soften) < thresh
