@@ -128,14 +128,14 @@ def fill_corners(input_image):
     enable peak location.
     '''
 
-    if input_image[0, 0] == 0:
+    if not input_image[0, 0].all():
         input_image = flood_fill(input_image, (0, 0), 255, tolerance = 10)
-    if input_image[0, 1] == 0:
-        input_image = flood_fill(input_image, (0, 1), 255, tolerance = 10)
-    if input_image[1, 1] == 0:
-        input_image = flood_fill(input_image, (1, 1), 255, tolerance = 10)
-    if input_image[1, 0] == 0:
-        input_image = flood_fill(input_image, (1, 0), 255, tolerance = 10)
+    if not input_image[0, -1].all():
+        input_image = flood_fill(input_image, (0, -1), 255, tolerance = 10)
+    if not input_image[-1, 0].all():
+        input_image = flood_fill(input_image, (-1, 0), 255, tolerance = 10)
+    if not input_image[-1, -1].all():
+        input_image = flood_fill(input_image, (-1, -1), 255, tolerance = 10)
     
     return input_image
 
