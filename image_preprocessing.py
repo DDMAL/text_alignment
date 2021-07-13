@@ -127,14 +127,10 @@ def fill_corners(input_image):
     Checks each corner of the image to identify areas of black pixels. Converts such regions into white pixels to 
     enable peak location.
     '''
-    if input_image[0, 0] == 0:
-        input_image = flood_fill(input_image, (0, 0), 255, tolerance = 0)
-    if input_image[-1, 0] == 0:
-        input_imaage = flood_fill(input_image, (-1, 0), 255, tolerance = 0)
-    if input_image[0, -1] == 0:
-        input_image = flood_fill(input_image, (0, -1), 255, tolerance = 0)
-    if input_image[-1, -1] == 0:
-        input_imaage = flood_fill(input_image, (-1, -1), 255, tolerance = 0)
+    input_image = flood_fill(input_image, (0, 0), 255, tolerance = 0.3)
+    input_image = flood_fill(input_image, (-1, 0), 255, tolerance = 0.3)
+    input_image = flood_fill(input_image, (0, -1), 255, tolerance = 0.3)
+    input_image = flood_fill(input_image, (-1, -1), 255, tolerance = 0.3)
 
     return input_image
 
